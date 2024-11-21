@@ -133,6 +133,8 @@ def circuitPartition(path, device_qubit_number, randomseed):
     subcircuit_qubit_partitions = [[] for _ in range(k)]
 
     # qubit 到 partition的字典
+    ## qubit_loc_dic: 比特属于哪个子线路 {0: 1, 1: 1, 2: 0, 3: 0}
+    ## subcircuit_qubit_partitions: 子线路包含哪些比特 [[2, 3], [0, 1]]
     qubit_loc_dic = {}
     for index, value in enumerate(membership):
         qubit_loc_dic[index] = value
