@@ -174,8 +174,8 @@ def batch_srs_info():
     srs_info_list_vneighbor = {}
     N_samples = 100
     total_time = 100
-    path_write_avg = '../exp_data_pra_1127/srs_info/srs_avg_2x2.json'
-    path_write_vneighbors = '../exp_data_pra_1127/srs_info/srs_vneighbors2x2.json'
+    path_write_avg = '../exp_data_pra/srs_info/srs_avg_2x2.json'
+    path_write_vneighbors = '../exp_data_pra/srs_info/srs_vneighbors2x2.json'
     for i in range(6, 7):
         for qubit_per_channel in qubit_per_channels:
             for cutoff in cutoffs:

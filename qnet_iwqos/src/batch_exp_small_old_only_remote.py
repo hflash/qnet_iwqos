@@ -25,7 +25,7 @@ from circuit2graph import circuitPartition
 # L1: 线路分割+线路映射
 # L2: 线路执行优化
 def batch_circuit_execution(schedule, qswap, cutoff, qubit_per_channel, num_sample, small_device_qubit_number, large_device_qubit_number):
-    path = '../exp_circuit_benchmark/pra_benchmark/small_scale'
+    path = '../exp_circuit_benchmark/small_scale'
     # path = './'
     # print(circuitPartition(path))
     data = []

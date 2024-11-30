@@ -21,11 +21,12 @@ import time
 
 from scipy.sparse.csgraph import dijkstra
 # from circuit2graph import circuitPartition
-import src.main_cd_circuit_execution as cd
+import main_cd_circuit_execution as cd
 import numpy as np
-from src.matrix2matrix import map_nodes
-from src.circuit2graph import circuitPartition
-
+from matrix2matrix import map_nodes
+from circuit2graph import circuitPartition
+import heapq
+from quantumcircuit.remotedag import RemoteDag
 
 def circuit_partition_trial():
     random.seed(0)
@@ -281,6 +282,44 @@ def virtual_adjacency_matrix(S):
     return virtual_adj
 
 
+def check_entanglements(s, d, S):
+    """
+
+    :param s: source node
+    :param d: destination node
+    :param S: entanglement matrix
+    :return:
+    """
+    """
+            % S[i][j][m] contains the info about the qubit with address (i,j,m), which is the qubit held by node i in register (j,m), meaning that it was initially used to generate an elementary link with node j.
+            % S[i][j][m][0]: age of the qubit (<cutoff+1).
+            % S[i][j][m][1]: number of times its link was involved in swaps (<M).
+            % S[i][j][m][2]: address of the qubit with which it is entangled.
+            % address: [a, b ,c] a: location (node a), b: 与node b 相连, c: 第c个通信比特
+            % S[i][j]=0.0, if nodes i and j do not share a physical link.
+            % S[i][j][m]=None, if qubit (i,j,m) is unused.
+            """
+    # 节点 8 与节点 2相连，但是S[2][8] = S[8][2] = 0, 这表示8 和 2没有物理链接，虚拟链接无法这样判定
+    # 事实上，只能检索这两个node的每一个纠缠，看看是否与对方相连
+
+    assert s != d
+    check_list = [s, d]
+    for check_node in check_list:
+        for node, node_link in enumerate(S[check_node]):
+            # 与邻居的纠缠
+            if node_link != 0:
+                for index, link in enumerate(node_link):
+                    # 该link中比特正共享纠缠
+                    if link is not None:
+                        link_destination = link[2][0]
+                        link_loc_node = link[2][1]
+                        link_loc_qubit = link[2][2]
+                        if link_destination == s and check_node == d:
+                            return True
+                        elif link_destination == d and check_node == s:
+                            return True
+    return False
+
 def consuming_entanglements(s, d, S):
     """
 
@@ -324,7 +363,7 @@ def consuming_entanglements(s, d, S):
                             # print(S[link_destination][link_loc_node][link_loc_qubit])
                             S[link_destination][link_loc_node][link_loc_qubit] = None
                             break
-        return S
+    return S
 
 
 def consuming_entanglements_old(s, d, S):
@@ -511,6 +550,155 @@ def parallel_execute_remote_operation(current_remote_operation_info, S, vadj, ma
 
     return execute_results, S
 
+#fzchen
+def my_dijkstra(graph_matrix, source, target, max_length):
+    """
+    基于邻接矩阵实现 Dijkstra 算法 (单源 -> 单目标)。
+    
+    参数：
+    - graph_matrix: 二维列表形式的邻接矩阵
+    - source: 源点索引
+    - target: 目标点索引
+    
+    返回：
+    - 最短路径距离和路径 (距离, 路径)。若不可达，返回 (float('inf'), [])。
+    """
+    n = len(graph_matrix)  # 节点总数
+    dist = [100000] * n  # 初始化所有节点距离为无穷大
+    dist[source] = 0  # 源点距离为 0
+    prev = [None] * n  # 用于路径回溯
+    visited = [False] * n  # 标记节点是否已访问
+    priority_queue = [(0, source)]  # 优先队列 (距离, 节点)
+
+    while priority_queue:
+        current_dist, current_node = heapq.heappop(priority_queue)
+
+        # 如果已访问，跳过
+        if visited[current_node]:
+            continue
+        visited[current_node] = True
+
+        # 如果找到目标点，回溯路径并返回,同时给出最小带宽
+        min_bandwidth = 100000
+        if current_node == target:
+            if current_dist > max_length:
+                return 100000, [], 0, []
+            path = []
+            one_bandwidth_edge = []
+            while current_node is not None:
+                path.append(current_node)
+                last_node = current_node
+                current_node = prev[current_node]
+                if current_node is not None:
+                    tmp_bandwidth = graph_matrix[last_node][current_node]
+                    if tmp_bandwidth < min_bandwidth:
+                        min_bandwidth = tmp_bandwidth
+                    if tmp_bandwidth == 1:
+                        if last_node < current_node:
+                            one_bandwidth_edge.append((last_node,current_node))
+                        else:
+                            one_bandwidth_edge.append((current_node, last_node))
+            return current_dist, path[::-1], min_bandwidth, one_bandwidth_edge  # 路径反转
+
+        # 遍历邻居节点
+        for neighbor in range(n):
+            weight = 100000
+            if graph_matrix[current_node][neighbor] != 0:
+                weight = 1            
+            if weight != 100000 and not visited[neighbor]:  # 有效边且未访问
+                new_dist = current_dist + weight
+                if new_dist < dist[neighbor]:
+                    dist[neighbor] = new_dist
+                    prev[neighbor] = current_node
+                    heapq.heappush(priority_queue, (new_dist, neighbor))
+
+    # 如果队列耗尽仍未找到目标点，说明不可达
+    return 100000, [], 0, []
+
+#fzchen
+
+def rank(vadj, gate, max_dist, remotedag:RemoteDag, exe_impact_cnt, F_cnt,successors_total_cnt):
+
+    h_direct_weight_alhpa = 1
+    h_indirect_weight_belta = 1
+    h_indirect_weight_gama = 1
+    h_global_exe_weight_delta = 1
+    h_global_sr_weight_tao = 1
+
+    fidelity_lambda = 0.5
+
+    W_max = np.max(vadj)
+    q1_loc,q2_loc = gate[1]
+    assert W_max > 0
+    h_direct = h_direct_weight_alhpa*vadj[q1_loc][q2_loc]/W_max
+
+    h_indirect = h_indirect_weight_belta*gate[2][2]/W_max - h_indirect_weight_gama*gate[2][0]/max_dist
+
+    exe_impact = h_global_exe_weight_delta*exe_impact_cnt/F_cnt
+
+    successor_rate = 0
+    if successors_total_cnt > 0:
+        successor_rate = h_global_sr_weight_tao*remotedag.gate_dict[gate[0]].get_successors_cnt() / successors_total_cnt
+    h_global = exe_impact + successor_rate
+    return (pow(fidelity_lambda,gate[2][0]))*(h_direct + h_indirect + h_global)
+
+#fzchen
+#gate: [gate_id, [qubit1_loc, qubit2_loc], [dist, path, min_bandwidth,one_bondwidth_path], rank]
+def execute_remote_operation_greedy_rank(current_remote_operation_info, S, vadj, max_length, remotedag:RemoteDag):
+    #排序
+    current_remote_gates_list = [list(x) for x in list(current_remote_operation_info.items())]
+    
+    max_dist = 0
+    total_successors_cnt = 0
+    gate_n = len(current_remote_gates_list)
+    
+    for gate in current_remote_gates_list:
+        qubit1_loc = gate[1][0]
+        qubit2_loc = gate[1][1]
+        dist, path, min_bandwidth,one_bondwidth_path = my_dijkstra(vadj, qubit1_loc, qubit2_loc, max_length)
+        assert dist<100000
+        if dist>max_dist:
+            max_dist = dist
+        gate.append([dist, path, min_bandwidth,one_bondwidth_path])
+
+        total_successors_cnt += remotedag.gate_dict[gate[0]].get_successors_cnt()
+
+    exe_impact_matrix = [0]*gate_n
+    for i in range(gate_n):
+        path1 = current_remote_gates_list[i][2][3]
+        for j in range(i+1, gate_n):
+            path2 = current_remote_gates_list[j][2][3]
+            if bool(set(path1) & set(path2)):
+                exe_impact_matrix[i] += 1
+                exe_impact_matrix[j] += 1
+
+    for i in range(gate_n):
+        current_remote_gates_list[i].append(rank(vadj, current_remote_gates_list[i], max_dist, remotedag, exe_impact_matrix[i], gate_n, total_successors_cnt))
+    current_remote_gates_list.sort(key=lambda x:x[3],reverse=True)
+    
+
+    
+    
+    execute_results = {}
+
+    for index in range(gate_n):
+        gate = current_remote_gates_list[index]
+        path = gate[2][1]
+        if len(path) == 0:
+            continue
+        for i in range(0,len(path)-1):
+            if check_entanglements(path[i], path[i+1], S) == False:
+                break
+        else:
+            tmp_path = []
+            for i in range(len(path)-1):
+                S = consuming_entanglements(path[i], path[i+1], S)
+                tmp_path.append(path[i])
+                tmp_path.append(path[i+1])
+            execute_results[gate[0]] = tmp_path
+
+
+    return execute_results, S
 
 def virtual_srs_info(srs_configurations, N_samples, total_time):
     protocol = 'srs'
@@ -769,6 +957,10 @@ def time_evolution_greedy(srs_configurations, circuit_dagtable, gate_list, qubit
     # print("Initial current gates:")
     # print(current_gate)
 
+    #生成远程门的dag
+    node_cnt = len(virtual_adjacency_matrix(S))
+    remotedag = RemoteDag(node_cnt, remote_operations, gate_list, qubit_loc_subcircuit_dic)
+
     # 除非线路执行完，否则循环不停止；设置一个时间界，超过该时间也强行停止
     while not all_executed:
         # 本轮执行的门或执行方案
@@ -836,7 +1028,7 @@ def time_evolution_greedy(srs_configurations, circuit_dagtable, gate_list, qubit
                     this_step_operations.append([gate_id, 'local'])
             if len(current_remote_operation_info) == 1:
                 # schedule 3 parallelize remote operations
-                gate_id = current_remote_operation_info.keys()[0]
+                gate_id = list(current_remote_operation_info.keys())[0]
                 vadj = virtual_adjacency_matrix(S)
                 qubit1_loc = current_remote_operation_info[gate_id][0]
                 qubit2_loc = current_remote_operation_info[gate_id][1]
@@ -856,27 +1048,42 @@ def time_evolution_greedy(srs_configurations, circuit_dagtable, gate_list, qubit
                 # 写一个新的函数，替换下面的parallel_execute_remote_operation()
                 # 应该也是一个一个执行（确定优先级、执行最高的那个门），执行完毕之后，回到这里，更新executed_gate_list
                 # 更新front layer和current_remote_operation_info，循环直到当前所有的门都无法执行
-                vadj = virtual_adjacency_matrix(S)
-                execute_results, S = parallel_execute_remote_operation(current_remote_operation_info, S, vadj,
-                                                                       max_links_swapped)
-                # execute_results[gate_id] = [path]
-                # executed_gate_list.append(gate_id) if execute_results[gate_id] for gate_id in execute_results.keys()
-                for execute_result in execute_results:
-                    assert gate_id in remote_operations
-                    gate_id = execute_result[0]
-                    path = execute_result[1]
-                    if path is not None:
-                        executed_gate_list.append(gate_id)
-                        ecost += len(path) / 2
-                        gate = gate_list[gate_id]
-                        qubits = gate.get_qubits()
-                        for qubit in qubits:
-                            qubit_executed_gate[qubit] = gate_id
-                        operation = [gate_id, path]
-                        this_step_operations.append(operation)
-                    else:
-                        operation = [gate_id, 'not executed']
-                        this_step_operations.append(operation)
+                some_gate_exe_flag = True
+                while some_gate_exe_flag:
+                    vadj = virtual_adjacency_matrix(S)
+                    # execute_results, S = parallel_execute_remote_operation(current_remote_operation_info, S, vadj,
+                    #                                                        max_links_swapped)
+                    execute_results, S = execute_remote_operation_greedy_rank(current_remote_operation_info, S, vadj,
+                                                                        max_links_swapped, remotedag)
+                    some_gate_exe_flag = False
+                    for gate_id in execute_results.keys():
+                        assert gate_id in remote_operations
+                        path = execute_results[gate_id]
+                        if len(path) > 0:
+                            executed_gate_list.append(gate_id)
+                            ecost += len(path) / 2
+                            gate = gate_list[gate_id]
+                            qubits = gate.get_qubits()
+                            for qubit in qubits:
+                                qubit_executed_gate[qubit] = gate_id
+                            operation = [gate_id, path]
+                            this_step_operations.append(operation)
+                            some_gate_exe_flag = True
+                        else:
+                            operation = [gate_id, 'not executed']
+                            this_step_operations.append(operation)
+                    current_gate = get_front_layer(qubit_executed_gate, circuit_dagtable, gate_list, executed_gate_list)
+                    current_remote_operation_info = {}
+                    for gate_id in current_gate:
+                        # current_remote_operation_info[gate_id] = [qubit1_loc, qubit2_loc]
+                        # 这个字典存储的是当前远程操作的信息，key为gate_id，值为相应的量子比特所在的量子节点
+                        if gate_id in remote_operations:
+                            gate = gate_list[gate_id]
+                            qubit1 = gate.get_qubits()[0]
+                            qubit2 = gate.get_qubits()[1]
+                            qubit1_loc = subcircuits_allocation[qubit_loc_subcircuit_dic[qubit1]]
+                            qubit2_loc = subcircuits_allocation[qubit_loc_subcircuit_dic[qubit2]]
+                            current_remote_operation_info[gate_id] = [qubit1_loc, qubit2_loc]
         execution_schedule.append(this_step_operations)
         current_gate = get_front_layer(qubit_executed_gate, circuit_dagtable, gate_list, executed_gate_list)
         S, counts = cd.step_protocol_srs(S, p_gen, q_swap, p_swap, p_cons, cutoff, max_links_swapped, randomseed)
@@ -1546,7 +1753,7 @@ def time_evolution_old_only_remote_time(srs_configurations, circuit_dagtable, ga
 # break
 #
 def batch_circuit_execution(schedule, num_sample, small_device_qubit_number, large_device_qubit_number):
-    path = '../exp_circuit_benchmark/pra_benchmark/small_scale'
+    path = '../exp_circuit_benchmark/small_scale'
     # print(circuitPartition(path))
     for root, dirs, files in os.walk(path):
         for file in files:
@@ -1612,21 +1819,22 @@ if __name__ == "__main__":
     # for schedule in schedules:
     #     batch_circuit_execution(schedule, N_samples, small_device_qubit_number, large_device_qubit_number)
     # qasm_path = '../exp_circuit_benchmark/small_scale/cm82a_208.qasm'
-    qasm_path = "./adder_n4.qasm"
+    import sys
+    qasm_path = "/home/normaluser/fzchen/qnet_iwqos/qnet_iwqos/pra_benchmark/qft/qft_100.qasm"
     remote_operations, circuit_dagtable, gate_list, subcircuits_communication, qubit_loc_subcircuit_dic, subcircuit_qubit_partitions = circuitPartition(
-        qasm_path, device_qubit_number = 2, randomseed = 0)
+        qasm_path, device_qubit_number = 40, randomseed = 0)
     srs_configurations = srs_config_squared_hard(qubit_per_channel = 1, q_swap = 0.12, cutoff = 10, randomseed = 0)
 
     subcircuits_allocation = trivial_allocate_subcircuit(len(subcircuit_qubit_partitions),
                                                          subcircuits_communication,
                                                          srs_configurations['adj'])
-    ecost, time_step, execution_schedule, discard_entanglement_count = time_evolution(srs_configurations,
+    ecost, time_step, execution_schedule, discard_entanglement_count = time_evolution_greedy(srs_configurations,
                                                                                       circuit_dagtable,
                                                                                       gate_list,
                                                                                       qubit_loc_subcircuit_dic,
                                                                                       subcircuits_allocation,
                                                                                       remote_operations,
-                                                                                      schedule=0)
+                                                                                      schedule=2)
 
     print(ecost, time_step, execution_schedule, discard_entanglement_count)
     # cd_trial()
