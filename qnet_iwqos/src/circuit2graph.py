@@ -23,7 +23,7 @@ import numpy as np
 from qiskit import QuantumCircuit as IBMquantumcircuit
 import networkx as nx
 # import matplotlib.pyplot as plt
-from metisCut import metis_zmz
+from src.metisCut import metis_zmz
 from src.quantumcircuit.circuit import QuantumCircuit
 
 

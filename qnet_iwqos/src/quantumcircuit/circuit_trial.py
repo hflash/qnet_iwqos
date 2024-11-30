@@ -28,7 +28,7 @@ if __name__ == "__main__":
     # quantum_circuit = QuantumCircuit.load_alg("block")
     # quantum_circuit.print_dag_circuit()
     # print(quantum_circuit.to_QASM_list())
-
+    circuit = QuantumCircuit.from_QASM('../../exp_circuit_benchmark/pra_benchmark/small_scale/z4_268.qasm')
     # qc = QuantumCircuit.from_QASM("random_test.qasm")
     # print(qc.to_QASM("readfile_test.qasm"))
     quantum_circuit = QuantumCircuit(3)

@@ -11,6 +11,24 @@
 # that they have been altered from the originals.
 #
 # -*- coding: utf-8 -*-
+# @Time     : 2024/11/27 14:19
+# @Author   : HFLASH @ LINKE
+# @File     : metis_shortestpath.py
+# @Software : PyCharm
+
+# This code is part of LINKEQ.
+#
+# (C) Copyright LINKE 2023.
+#
+# This code is licensed under the Apache License, Version 2.0. You may
+# obtain a copy of this license in the LICENSE.txt file in the root directory
+# of this source tree or at http://www.apache.org/licenses/LICENSE-2.0.
+#
+# Any modifications or derivative works of this code must retain this
+# copyright notice, and modified files need to carry a notice indicating
+# that they have been altered from the originals.
+#
+# -*- coding: utf-8 -*-
 # @Time     : 2024/2/21 14:35
 # @Author   : HFLASH @ LINKE
 # @File     : batch_exp_small.py
@@ -18,14 +36,15 @@
 import os
 import time
 import numpy as np
-import distributed_operation_circuit as dioc
-from circuit2graph import circuitPartition
+import src.distributed_operation_circuit as dioc
+from src.circuit2graph import circuitPartition
+from datetime import datetime
 
 
 # L1: 线路分割+线路映射
 # L2: 线路执行优化
 def batch_circuit_execution(schedule, qswap, cutoff, qubit_per_channel, num_sample, small_device_qubit_number, large_device_qubit_number):
-    path = '../exp_circuit_benchmark/pra_benchmark/small_scale'
+    path = '../../exp_circuit_benchmark/pra_benchmark/small_scale'
     # path = './'
     # print(circuitPartition(path))
     data = []
@@ -46,8 +65,9 @@ def batch_circuit_execution(schedule, qswap, cutoff, qubit_per_channel, num_samp
                     scale = 'large'
                     device_qubit_number = large_device_qubit_number
                 for i in range(num_sample):
-                    path_write = '../exp_data/baseline_0221_unweighted_only_remote/' + scale + '/' + circuitname + '_shortest_path_' + str(
-                        i) + "_trivial_allocation" + "_bandwidth_" + str(qubit_per_channel) + '_old_' + '.txt'
+                    now = datetime.now()
+                    path_write = '../../exp_data_pra_1127/baseline_1127_only_remote/' + scale + '/' + circuitname + '_shortest_path_' + str(
+                        i) + "_trivial_allocation" + "_bandwidth_" + str(qubit_per_channel) + '_old_' + now+ '.txt'
                     print(path_write)
                     randomseed = np.random.seed()
                     # randomseed = 0
