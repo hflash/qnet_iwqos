@@ -965,8 +965,7 @@ def time_evolution_greedy(srs_configurations, circuit_dagtable, gate_list, qubit
     
 
     # 除非线路执行完，否则循环不停止；设置一个时间界，超过该时间也强行停止
-    #while not all_executed:
-    while len(current_gate) > 0:
+    while not all_executed:
         # 本轮执行的门或执行方案
         this_step_operations = [time_step]
         # 初始化当前的远程量子操作, 通过gate_id获取门相应的量子比特，再将量子比特对应到子线路上，最后通过子线路的映射确定量子比特的具体node
@@ -986,7 +985,6 @@ def time_evolution_greedy(srs_configurations, circuit_dagtable, gate_list, qubit
             for gate_id in current_gate:
                 if gate_id not in remote_operations:
                     executed_gate_list.append(gate_id)
-                    remotedag.execute_gate(gate_id)
                     # execute_gate(gate_id, circuit_dagtable)
                     gate = gate_list[gate_id]
                     qubits = gate.get_qubits()
@@ -1013,7 +1011,6 @@ def time_evolution_greedy(srs_configurations, circuit_dagtable, gate_list, qubit
                         path, S = execute_remote_operation_random_path(qubit1_loc, qubit2_loc, S, vadj, max_links_swapped)
                     if path is not None:
                         executed_gate_list.append(gate_id)
-                        remotedag.execute_gate(gate_id)
                         ecost += len(path) / 2
                         for qubit in qubits:
                             qubit_executed_gate[qubit] = gate_id
@@ -1023,29 +1020,26 @@ def time_evolution_greedy(srs_configurations, circuit_dagtable, gate_list, qubit
                         operation = [gate_id, 'not executed']
                         this_step_operations.append(operation)
         if schedule == 2:
-            # for gate_id in current_gate:
-            #     if gate_id not in remote_operations:
-            #         executed_gate_list.append(gate_id)
-            #         remotedag.execute_gate(gate_id)
-            #         # execute_gate(gate_id, circuit_dagtable)
-            #         gate = gate_list[gate_id]
-            #         qubits = gate.get_qubits()
-            #         for qubit in qubits:
-            #             qubit_executed_gate[qubit] = gate_id
-            #         this_step_operations.append([gate_id, 'local'])
+            for gate_id in current_gate:
+                if gate_id not in remote_operations:
+                    executed_gate_list.append(gate_id)
+                    # execute_gate(gate_id, circuit_dagtable)
+                    gate = gate_list[gate_id]
+                    qubits = gate.get_qubits()
+                    for qubit in qubits:
+                        qubit_executed_gate[qubit] = gate_id
+                    this_step_operations.append([gate_id, 'local'])
             if len(current_remote_operation_info) == 1:
                 # schedule 3 parallelize remote operations
                 gate_id = list(current_remote_operation_info.keys())[0]
-                gate = gate_list[gate_id]
                 vadj = virtual_adjacency_matrix(S)
                 qubit1_loc = current_remote_operation_info[gate_id][0]
                 qubit2_loc = current_remote_operation_info[gate_id][1]
                 path, S = execute_remote_operation_shortest_path(qubit1_loc, qubit2_loc, S, vadj, max_links_swapped)
                 if path is not None:
                     executed_gate_list.append(gate_id)
-                    remotedag.execute_gate(gate_id)
                     ecost += len(path) / 2
-                    for qubit in gate.get_qubits():
+                    for qubit in qubits:
                         qubit_executed_gate[qubit] = gate_id
                     operation = [gate_id, path]
                     this_step_operations.append(operation)
@@ -1070,7 +1064,6 @@ def time_evolution_greedy(srs_configurations, circuit_dagtable, gate_list, qubit
                         path = execute_results[gate_id]
                         if len(path) > 0:
                             executed_gate_list.append(gate_id)
-                            remotedag.execute_gate(gate_id)
                             ecost += len(path) / 2
                             gate = gate_list[gate_id]
                             qubits = gate.get_qubits()
@@ -1082,8 +1075,7 @@ def time_evolution_greedy(srs_configurations, circuit_dagtable, gate_list, qubit
                         else:
                             operation = [gate_id, 'not executed']
                             this_step_operations.append(operation)
-                    #current_gate = get_front_layer(qubit_executed_gate, circuit_dagtable, gate_list, executed_gate_list)
-                    current_gate = remotedag.get_front_layer()
+                    current_gate = get_front_layer(qubit_executed_gate, circuit_dagtable, gate_list, executed_gate_list)
                     current_remote_operation_info = {}
                     for gate_id in current_gate:
                         # current_remote_operation_info[gate_id] = [qubit1_loc, qubit2_loc]
@@ -1096,8 +1088,7 @@ def time_evolution_greedy(srs_configurations, circuit_dagtable, gate_list, qubit
                             qubit2_loc = subcircuits_allocation[qubit_loc_subcircuit_dic[qubit2]]
                             current_remote_operation_info[gate_id] = [qubit1_loc, qubit2_loc]
         execution_schedule.append(this_step_operations)
-        #current_gate = get_front_layer(qubit_executed_gate, circuit_dagtable, gate_list, executed_gate_list)
-        current_gate = remotedag.get_front_layer()
+        current_gate = get_front_layer(qubit_executed_gate, circuit_dagtable, gate_list, executed_gate_list)
         S, counts = cd.step_protocol_srs(S, p_gen, q_swap, p_swap, p_cons, cutoff, max_links_swapped, randomseed)
         time_step += 1
         discard_entanglement_count += counts
@@ -1107,7 +1098,7 @@ def time_evolution_greedy(srs_configurations, circuit_dagtable, gate_list, qubit
         # show_entanglement_status(S)
         # break
         #
-        # all_executed = check_all_executed(executed_gate_list, gate_list)
+        all_executed = check_all_executed(executed_gate_list, gate_list)
     return ecost, time_step, execution_schedule, discard_entanglement_count
 
 def time_evolution(srs_configurations, circuit_dagtable, gate_list, qubit_loc_subcircuit_dic, subcircuits_allocation,
@@ -1832,7 +1823,7 @@ if __name__ == "__main__":
     #     batch_circuit_execution(schedule, N_samples, small_device_qubit_number, large_device_qubit_number)
     # qasm_path = '../exp_circuit_benchmark/small_scale/cm82a_208.qasm'
     import sys
-    qasm_path = "/home/normaluser/fzchen/qnet_iwqos/qnet_iwqos/pra_benchmark/qft/qft_300.qasm"
+    qasm_path = "/home/normaluser/fzchen/qnet_iwqos/qnet_iwqos/pra_benchmark/qft/qft_100.qasm"
     remote_operations, circuit_dagtable, gate_list, subcircuits_communication, qubit_loc_subcircuit_dic, subcircuit_qubit_partitions = circuitPartition(
         qasm_path, device_qubit_number = 40, randomseed = 0)
     srs_configurations = srs_config_squared_hard(qubit_per_channel = 1, q_swap = 0.12, cutoff = 10, randomseed = 0)
