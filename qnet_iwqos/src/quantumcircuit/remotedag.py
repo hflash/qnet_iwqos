@@ -7,6 +7,7 @@ class Gate:
         self.q2_front:Gate = None
         self.successors:list[Gate] = []
         self.successors_cnt = 0
+        self.has_executed = False
     def get_successors_cnt(self):
         return self.successors_cnt
 
@@ -15,7 +16,6 @@ class RemoteDag:
         self.gate_list:list[Gate] = []
         self.node_last_gate:list[Gate] = [None for _ in range(node_cnt)]
         self.gate_dict = {}
-
         for gate_id in remote_operations:
             gate = circuit_gate_list[gate_id]
             qubit1 = gate.get_qubits()[0]
@@ -62,3 +62,14 @@ class RemoteDag:
         
         for gate in self.gate_list:
             gate.successors_cnt = successor_count[gate]
+
+    def get_front_layer(self):
+        front_layer = []
+        for gate in self.gate_list:
+            if (gate.q1_front is None or gate.q1_front.has_executed) and (gate.q2_front is None or gate.q2_front.has_executed) and not gate.has_executed:
+                front_layer.append(gate.id)
+        return front_layer
+    
+    def execute_gate(self,gateid:int):
+        if gateid in self.gate_dict:
+            self.gate_dict[gateid].has_executed = True
