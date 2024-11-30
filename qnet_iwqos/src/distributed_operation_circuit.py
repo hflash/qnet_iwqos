@@ -551,7 +551,7 @@ def parallel_execute_remote_operation(current_remote_operation_info, S, vadj, ma
     return execute_results, S
 
 #fzchen
-def my_dijkstra(graph_matrix, source, target, max_length):
+def my_dijkstra(graph_matrix, source, target):
     """
     基于邻接矩阵实现 Dijkstra 算法 (单源 -> 单目标)。
     
@@ -581,8 +581,6 @@ def my_dijkstra(graph_matrix, source, target, max_length):
         # 如果找到目标点，回溯路径并返回,同时给出最小带宽
         min_bandwidth = 100000
         if current_node == target:
-            if current_dist > max_length:
-                return 100000, [], 0, []
             path = []
             one_bandwidth_edge = []
             while current_node is not None:
@@ -632,7 +630,7 @@ def rank(vadj, gate, max_dist, remotedag:RemoteDag, exe_impact_cnt, F_cnt,succes
     assert W_max > 0
     h_direct = h_direct_weight_alhpa*vadj[q1_loc][q2_loc]/W_max
 
-    h_indirect = h_indirect_weight_belta*gate[2][2]/W_max - h_indirect_weight_gama*gate[2][0]/max_dist
+    h_indirect = h_indirect_weight_belta*gate[4]/W_max - h_indirect_weight_gama*gate[2]/max_dist
 
     exe_impact = h_global_exe_weight_delta*exe_impact_cnt/F_cnt
 
@@ -640,41 +638,44 @@ def rank(vadj, gate, max_dist, remotedag:RemoteDag, exe_impact_cnt, F_cnt,succes
     if successors_total_cnt > 0:
         successor_rate = h_global_sr_weight_tao*remotedag.gate_dict[gate[0]].get_successors_cnt() / successors_total_cnt
     h_global = exe_impact + successor_rate
-    return (pow(fidelity_lambda,gate[2][0]))*(h_direct + h_indirect + h_global)
+    return (pow(fidelity_lambda,gate[2]))*(h_direct + h_indirect + h_global)
 
 #fzchen
-#gate: [gate_id, [qubit1_loc, qubit2_loc], [dist, path, min_bandwidth,one_bondwidth_path], rank]
+#gate: [gate_id, [qubit1_loc, qubit2_loc], dist, path, min_bandwidth,one_bondwidth_path, rank]
 def execute_remote_operation_greedy_rank(current_remote_operation_info, S, vadj, max_length, remotedag:RemoteDag):
     #排序
     current_remote_gates_list = [list(x) for x in list(current_remote_operation_info.items())]
     
     max_dist = 0
     total_successors_cnt = 0
-    gate_n = len(current_remote_gates_list)
     
+    
+    executable_remote_gates_list = []
     for gate in current_remote_gates_list:
         qubit1_loc = gate[1][0]
         qubit2_loc = gate[1][1]
-        dist, path, min_bandwidth,one_bondwidth_path = my_dijkstra(vadj, qubit1_loc, qubit2_loc, max_length)
-        assert dist<100000
-        if dist>max_dist:
-            max_dist = dist
-        gate.append([dist, path, min_bandwidth,one_bondwidth_path])
+        dist, path, min_bandwidth,one_bondwidth_path = my_dijkstra(vadj, qubit1_loc, qubit2_loc)
+        if dist<100000:
+            if dist>max_dist:
+                max_dist = dist
+            executable_remote_gates_list.append(gate + [dist, path, min_bandwidth,one_bondwidth_path])
 
         total_successors_cnt += remotedag.gate_dict[gate[0]].get_successors_cnt()
 
+
+    gate_n = len(executable_remote_gates_list)
     exe_impact_matrix = [0]*gate_n
     for i in range(gate_n):
-        path1 = current_remote_gates_list[i][2][3]
+        path1 = executable_remote_gates_list[i][3]
         for j in range(i+1, gate_n):
-            path2 = current_remote_gates_list[j][2][3]
+            path2 = executable_remote_gates_list[j][3]
             if bool(set(path1) & set(path2)):
                 exe_impact_matrix[i] += 1
                 exe_impact_matrix[j] += 1
 
     for i in range(gate_n):
-        current_remote_gates_list[i].append(rank(vadj, current_remote_gates_list[i], max_dist, remotedag, exe_impact_matrix[i], gate_n, total_successors_cnt))
-    current_remote_gates_list.sort(key=lambda x:x[3],reverse=True)
+        executable_remote_gates_list[i].append(rank(vadj, executable_remote_gates_list[i], max_dist, remotedag, exe_impact_matrix[i], gate_n, total_successors_cnt))
+    executable_remote_gates_list.sort(key=lambda x:x[3],reverse=True)
     
 
     
@@ -682,9 +683,9 @@ def execute_remote_operation_greedy_rank(current_remote_operation_info, S, vadj,
     execute_results = {}
 
     for index in range(gate_n):
-        gate = current_remote_gates_list[index]
-        path = gate[2][1]
-        if len(path) == 0:
+        gate = executable_remote_gates_list[index]
+        path = gate[3]
+        if len(path) == 0 or len(path) > max_length:
             continue
         for i in range(0,len(path)-1):
             if check_entanglements(path[i], path[i+1], S) == False:
@@ -952,14 +953,16 @@ def time_evolution_greedy(srs_configurations, circuit_dagtable, gate_list, qubit
     # print("Initial entanglement status:")
     # show_entanglement_status(S)
 
-    # 确定当前直接可以执行的量子门
-    current_gate = get_first_layer(circuit_dagtable)
-    # print("Initial current gates:")
-    # print(current_gate)
-
     #生成远程门的dag
     node_cnt = len(virtual_adjacency_matrix(S))
     remotedag = RemoteDag(node_cnt, remote_operations, gate_list, qubit_loc_subcircuit_dic)
+
+    # 确定当前直接可以执行的量子门
+    current_gate = remotedag.get_front_layer()
+    # print("Initial current gates:")
+    # print(current_gate)
+
+    
 
     # 除非线路执行完，否则循环不停止；设置一个时间界，超过该时间也强行停止
     #while not all_executed:
@@ -1829,7 +1832,7 @@ if __name__ == "__main__":
     #     batch_circuit_execution(schedule, N_samples, small_device_qubit_number, large_device_qubit_number)
     # qasm_path = '../exp_circuit_benchmark/small_scale/cm82a_208.qasm'
     import sys
-    qasm_path = "/home/normaluser/fzchen/qnet_iwqos/qnet_iwqos/pra_benchmark/rca/rca_100.qasm"
+    qasm_path = "/home/normaluser/fzchen/qnet_iwqos/qnet_iwqos/pra_benchmark/qft/qft_300.qasm"
     remote_operations, circuit_dagtable, gate_list, subcircuits_communication, qubit_loc_subcircuit_dic, subcircuit_qubit_partitions = circuitPartition(
         qasm_path, device_qubit_number = 40, randomseed = 0)
     srs_configurations = srs_config_squared_hard(qubit_per_channel = 1, q_swap = 0.12, cutoff = 10, randomseed = 0)
@@ -1845,7 +1848,7 @@ if __name__ == "__main__":
                                                                                       remote_operations,
                                                                                       schedule=2)
 
-    print(ecost, time_step, execution_schedule, discard_entanglement_count)
+    print(ecost, time_step, discard_entanglement_count)
     # cd_trial()
     # path = '../circuit_benchmark/qft/qft_newnew_100.qasm'
     # path = '../circuit_benchmark/qaoa/qaoa_max_cut_50.qasm'
