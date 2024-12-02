@@ -1,5 +1,5 @@
 class Gate:
-    def __init__(self,id, q1_loc, q2_loc):
+    def __init__(self,id, q1_loc, q2_loc, q1, q2):
         self.id = id
         self.q1_loc = q1_loc
         self.q2_loc = q2_loc
@@ -12,9 +12,9 @@ class Gate:
         return self.successors_cnt
 
 class RemoteDag:
-    def __init__(self, node_cnt, remote_operations, circuit_gate_list, qubit_loc_subcircuit_dic):
+    def __init__(self, qubit_cnt, remote_operations, circuit_gate_list, qubit_loc_subcircuit_dic):
         self.gate_list:list[Gate] = []
-        self.node_last_gate:list[Gate] = [None for _ in range(node_cnt)]
+        self.qubit_last_gate:list[Gate] = [None for _ in range(qubit_cnt)]
         self.gate_dict = {}
         for gate_id in remote_operations:
             gate = circuit_gate_list[gate_id]
@@ -23,20 +23,20 @@ class RemoteDag:
             qubit1_loc = qubit_loc_subcircuit_dic[qubit1]
             qubit2_loc = qubit_loc_subcircuit_dic[qubit2]
 
-            self.add_Gate(gate_id, qubit1_loc, qubit2_loc)
+            self.add_Gate(gate_id, qubit1_loc, qubit2_loc, qubit1, qubit2)
         self.calculate_cnt()
 
 
-    def add_Gate(self, id, q1_loc, q2_loc):
-        tmp_Gate = Gate(id, q1_loc, q2_loc)
-        tmp_Gate.q1_front = self.node_last_gate[q1_loc]
-        tmp_Gate.q2_front = self.node_last_gate[q2_loc]
-        if self.node_last_gate[q1_loc]:
-            self.node_last_gate[q1_loc].successors.append(tmp_Gate)
-        if self.node_last_gate[q2_loc]:
-            self.node_last_gate[q2_loc].successors.append(tmp_Gate)    
-        self.node_last_gate[q1_loc] = tmp_Gate
-        self.node_last_gate[q2_loc] = tmp_Gate
+    def add_Gate(self, id, q1_loc, q2_loc, q1, q2):
+        tmp_Gate = Gate(id, q1_loc, q2_loc, q1, q2)
+        tmp_Gate.q1_front = self.qubit_last_gate[q1]
+        tmp_Gate.q2_front = self.qubit_last_gate[q2]
+        if self.qubit_last_gate[q1]:
+            self.qubit_last_gate[q1].successors.append(tmp_Gate)
+        if self.qubit_last_gate[q2]:
+            self.qubit_last_gate[q2].successors.append(tmp_Gate)    
+        self.qubit_last_gate[q1] = tmp_Gate
+        self.qubit_last_gate[q2] = tmp_Gate
         self.gate_list.append(tmp_Gate)
         self.gate_dict[id] = tmp_Gate
     def calculate_cnt(self):
