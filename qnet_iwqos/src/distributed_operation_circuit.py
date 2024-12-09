@@ -735,7 +735,7 @@ def virtual_srs_info(srs_configurations, N_samples, total_time):
     print(vneighborhoods)
 
 
-def srs_config_squared_hard(qubit_per_channel, q_swap, cutoff, randomseed):
+def srs_config_squared_hard(qubit_per_channel, q_swap, p_cons, cutoff, randomseed):
     srs_configurations = {}
 
     ## TOPOLOGY
@@ -759,7 +759,7 @@ def srs_config_squared_hard(qubit_per_channel, q_swap, cutoff, randomseed):
     ## SOFTWARE
     # q_swap = 0.12  # Probability of performing swaps in the SRS protocol
     max_links_swapped = 4  #  Maximum number of elementary links swapped
-    p_cons = 0  # Probability of virtual neighbors consuming a link per time step
+    # p_cons = 0  # Probability of virtual neighbors consuming a link per time step
     srs_configurations['q_swap'] = q_swap
     srs_configurations['max_swap'] = max_links_swapped
     srs_configurations['p_cons'] = p_cons
@@ -775,7 +775,7 @@ def srs_config_squared_hard(qubit_per_channel, q_swap, cutoff, randomseed):
     return srs_configurations
 
 
-def srs_config_tree(qubit_per_channel, q_swap, cutoff, randomseed):
+def srs_config_tree(qubit_per_channel, q_swap, p_cons,cutoff, randomseed):
     srs_configurations = {}
 
     ## TOPOLOGY
@@ -800,7 +800,7 @@ def srs_config_tree(qubit_per_channel, q_swap, cutoff, randomseed):
     ## SOFTWARE
     # q_swap = 0.12  # Probability of performing swaps in the SRS protocol
     max_links_swapped = 4  #  Maximum number of elementary links swapped
-    p_cons = 0  # Probability of virtual neighbors consuming a link per time step
+    # p_cons = 0  # Probability of virtual neighbors consuming a link per time step
     srs_configurations['q_swap'] = q_swap
     srs_configurations['max_swap'] = max_links_swapped
     srs_configurations['p_cons'] = p_cons
@@ -816,7 +816,7 @@ def srs_config_tree(qubit_per_channel, q_swap, cutoff, randomseed):
     return srs_configurations
 
 
-def srs_config_chain(qubit_per_channel, q_swap, cutoff, randomseed):
+def srs_config_chain(qubit_per_channel, q_swap, p_cons, cutoff, randomseed):
     srs_configurations = {}
 
     ## TOPOLOGY
@@ -841,7 +841,7 @@ def srs_config_chain(qubit_per_channel, q_swap, cutoff, randomseed):
     ## SOFTWARE
     # q_swap = 0.12  # Probability of performing swaps in the SRS protocol
     max_links_swapped = 4  #  Maximum number of elementary links swapped
-    p_cons = 0  # Probability of virtual neighbors consuming a link per time step
+    # p_cons = 0  # Probability of virtual neighbors consuming a link per time step
     srs_configurations['q_swap'] = q_swap
     srs_configurations['max_swap'] = max_links_swapped
     srs_configurations['p_cons'] = p_cons
@@ -958,8 +958,9 @@ def time_evolution_greedy(srs_configurations, circuit_dagtable, gate_list, qubit
     # show_entanglement_status(S)
 
     # 生成远程门的dag
-    node_cnt = len(virtual_adjacency_matrix(S))
-    remotedag = RemoteDag(node_cnt, remote_operations, gate_list, qubit_loc_subcircuit_dic)
+    # node_cnt = len(virtual_adjacency_matrix(S))
+    qubit_cnt = len(circuit_dagtable)
+    remotedag = RemoteDag(qubit_cnt, remote_operations, gate_list, qubit_loc_subcircuit_dic)
 
     # 确定当前直接可以执行的量子门
     current_gate = remotedag.get_front_layer()
@@ -1963,10 +1964,10 @@ if __name__ == "__main__":
     # qasm_path = '../exp_circuit_benchmark/small_scale/cm82a_208.qasm'
     import sys
 
-    qasm_path = "/home/normaluser/fzchen/qnet_iwqos/qnet_iwqos/pra_benchmark/qft/qft_100.qasm"
+    qasm_path = "/home/normaluser/fzchen/qnet_iwqos/qnet_iwqos/pra_benchmark/qaoa/qaoa_300.qasm"
     remote_operations, circuit_dagtable, gate_list, subcircuits_communication, qubit_loc_subcircuit_dic, subcircuit_qubit_partitions = circuitPartition(
         qasm_path, device_qubit_number=40, randomseed=0)
-    srs_configurations = srs_config_squared_hard(qubit_per_channel=1, q_swap=0.12, cutoff=10, randomseed=0)
+    srs_configurations = srs_config_squared_hard(qubit_per_channel=1, q_swap=0.12, p_cons = 0.05, cutoff=10, randomseed=0)
 
     subcircuits_allocation = trivial_allocate_subcircuit(len(subcircuit_qubit_partitions),
                                                          subcircuits_communication,

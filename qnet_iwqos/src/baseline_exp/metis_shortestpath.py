@@ -43,8 +43,8 @@ from datetime import datetime
 
 # L1: 线路分割+线路映射
 # L2: 线路执行优化
-def batch_circuit_execution(schedule, qswap, cutoff, qubit_per_channel, num_sample, small_device_qubit_number, large_device_qubit_number):
-    path = '../../exp_circuit_benchmark/pra_benchmark/small_scale'
+def batch_circuit_execution(schedule, qswap, p_cons, cutoff, qubit_per_channel, num_sample, small_device_qubit_number, large_device_qubit_number):
+    path = '../../exp_circuit_benchmark/pra_benchmark/qaoa'
     # path = './'
     # print(circuitPartition(path))
     data = []
@@ -61,7 +61,7 @@ def batch_circuit_execution(schedule, qswap, cutoff, qubit_per_channel, num_samp
                 if 'small' in qasm_path:
                     scale = 'small'
                     device_qubit_number = small_device_qubit_number
-                if 'large' in qasm_path:
+                else:
                     scale = 'large'
                     device_qubit_number = large_device_qubit_number
                 for i in range(num_sample):
@@ -74,7 +74,7 @@ def batch_circuit_execution(schedule, qswap, cutoff, qubit_per_channel, num_samp
                     timestart = time.time()
                     remote_operations, circuit_dagtable, gate_list, subcircuits_communication, qubit_loc_subcircuit_dic, subcircuit_qubit_partitions = circuitPartition(
                         qasm_path, device_qubit_number, randomseed)
-                    srs_configurations = dioc.srs_config_squared_hard(qubit_per_channel, qswap, cutoff, randomseed)
+                    srs_configurations = dioc.srs_config_squared_hard(qubit_per_channel, qswap, p_cons, cutoff, randomseed)
                     # srs_configurations = dioc.srs_config_tree(qubit_per_channel, cutoff, randomseed)
                     # srs_configurations = dioc.srs_config_chain(qubit_per_channel, cutoff, randomseed)
                     subcircuits_allocation = dioc.trivial_allocate_subcircuit(len(subcircuit_qubit_partitions),
@@ -113,7 +113,7 @@ if __name__ == "__main__":
     small_device_qubit_number = 5
     large_device_qubit_number = 40
     # qubit_per_channels = [1, 3, 5]
-    qubit_per_channels = [3]
+    qubit_per_channels = [1]
     N_samples = 1
     # data = []
     # data_cal = 0
@@ -121,5 +121,5 @@ if __name__ == "__main__":
     # q_swaps = [i * 0.1 for i in range(1, 11)]
     for schedule in schedules:
         for qubit_per_channel in qubit_per_channels:
-            batch_circuit_execution(schedule, 0.12, 10, qubit_per_channel, N_samples, small_device_qubit_number,
+            batch_circuit_execution(schedule, 0.12, 0.2,10, qubit_per_channel, N_samples, small_device_qubit_number,
                                     large_device_qubit_number)
