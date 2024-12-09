@@ -735,7 +735,7 @@ def virtual_srs_info(srs_configurations, N_samples, total_time):
     print(vneighborhoods)
 
 
-def srs_config_squared_hard(qubit_per_channel, q_swap, p_cons, cutoff, randomseed):
+def srs_config_squared_hard(qubit_per_channel, p_gen, p_swap, q_swap, p_cons, cutoff, randomseed):
     srs_configurations = {}
 
     ## TOPOLOGY
@@ -749,8 +749,8 @@ def srs_config_squared_hard(qubit_per_channel, q_swap, p_cons, cutoff, randomsee
     srs_configurations['adj'] = A
 
     ## HARDWARE
-    p_gen = 1  # Probability of successful entanglement generation
-    p_swap = 1  # Probability of successful swap
+    # p_gen = 1  # Probability of successful entanglement generation
+    # p_swap = 1  # Probability of successful swap
     qbits_per_channel = qubit_per_channel  # Number of qubits per node per physical neighbor
     srs_configurations['p_gen'] = p_gen
     srs_configurations['p_swap'] = p_swap
@@ -775,7 +775,7 @@ def srs_config_squared_hard(qubit_per_channel, q_swap, p_cons, cutoff, randomsee
     return srs_configurations
 
 
-def srs_config_tree(qubit_per_channel, q_swap, p_cons,cutoff, randomseed):
+def srs_config_tree(qubit_per_channel, p_gen, p_swap, q_swap, p_cons,cutoff, randomseed):
     srs_configurations = {}
 
     ## TOPOLOGY
@@ -790,8 +790,8 @@ def srs_config_tree(qubit_per_channel, q_swap, p_cons,cutoff, randomseed):
     srs_configurations['adj'] = A
 
     ## HARDWARE
-    p_gen = 1  # Probability of successful entanglement generation
-    p_swap = 1  # Probability of successful swap
+    # p_gen = 1  # Probability of successful entanglement generation
+    # p_swap = 1  # Probability of successful swap
     qbits_per_channel = qubit_per_channel  # Number of qubits per node per physical neighbor
     srs_configurations['p_gen'] = p_gen
     srs_configurations['p_swap'] = p_swap
@@ -816,7 +816,7 @@ def srs_config_tree(qubit_per_channel, q_swap, p_cons,cutoff, randomseed):
     return srs_configurations
 
 
-def srs_config_chain(qubit_per_channel, q_swap, p_cons, cutoff, randomseed):
+def srs_config_chain(qubit_per_channel, p_gen, p_swap, q_swap, p_cons, cutoff, randomseed):
     srs_configurations = {}
 
     ## TOPOLOGY
@@ -831,8 +831,8 @@ def srs_config_chain(qubit_per_channel, q_swap, p_cons, cutoff, randomseed):
     srs_configurations['adj'] = A
 
     ## HARDWARE
-    p_gen = 1  # Probability of successful entanglement generation
-    p_swap = 1  # Probability of successful swap
+    # p_gen = 1  # Probability of successful entanglement generation
+    # p_swap = 1  # Probability of successful swap
     qbits_per_channel = qubit_per_channel  # Number of qubits per node per physical neighbor
     srs_configurations['p_gen'] = p_gen
     srs_configurations['p_swap'] = p_swap
@@ -1967,7 +1967,7 @@ if __name__ == "__main__":
     qasm_path = "/home/normaluser/fzchen/qnet_iwqos/qnet_iwqos/pra_benchmark/qaoa/qaoa_300.qasm"
     remote_operations, circuit_dagtable, gate_list, subcircuits_communication, qubit_loc_subcircuit_dic, subcircuit_qubit_partitions = circuitPartition(
         qasm_path, device_qubit_number=40, randomseed=0)
-    srs_configurations = srs_config_squared_hard(qubit_per_channel=1, q_swap=0.12, p_cons = 0.05, cutoff=10, randomseed=0)
+    srs_configurations = srs_config_squared_hard(qubit_per_channel=1,  p_gen = 1, p_swap = 0.95, q_swap=0.12, p_cons = 0.05, cutoff=10, randomseed=0)
 
     subcircuits_allocation = trivial_allocate_subcircuit(len(subcircuit_qubit_partitions),
                                                          subcircuits_communication,
