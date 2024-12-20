@@ -25,8 +25,8 @@ import math
 import importlib
 import networkx as nx
 import matplotlib.pyplot as plt
-from src.quantumcircuit.gate import *
-from src.quantumcircuit.register import *
+from quantumcircuit.gate import *
+from quantumcircuit.register import *
 
 
 class QuantumCircuit:
