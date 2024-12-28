@@ -26,7 +26,8 @@ import numpy as np
 from matrix2matrix import map_nodes
 from circuit2graph import circuitPartition
 import heapq
-from quantumcircuit.remotedag import RemoteDag
+from src.quantumcircuit.remotedag import RemoteDag
+from src.srs_data import get_virtual_adjacency_matrix_of_3x3
 
 
 def circuit_partition_trial():
@@ -647,6 +648,7 @@ def rank(vadj, gate, max_dist, remotedag: RemoteDag, exe_impact_cnt, F_cnt, succ
     q1_loc, q2_loc = gate[1]
     assert W_max > 0
     h_direct = h_direct_weight_alpha * vadj[q1_loc][q2_loc] / W_max
+    h_direct = h_direct_weight_alpha * vadj[q1_loc][q2_loc] / W_max
 
     h_indirect = h_indirect_weight_belta * gate[4] / W_max - h_indirect_weight_gama * gate[2] / max_dist
 
@@ -846,7 +848,7 @@ def srs_config_chain(qubit_per_channel, p_gen, p_swap, q_swap, p_cons, cutoff, r
     l = 3
     # n = int(l * l)
     # A = cd.adjacency_squared_hard(l)
-    A = cd.adjacency_chain(9)
+    A = cd.adjacency_chain(4)
     topology = 'chain'
     srs_configurations['adj'] = A
 
@@ -860,6 +862,7 @@ def srs_config_chain(qubit_per_channel, p_gen, p_swap, q_swap, p_cons, cutoff, r
 
     ## SOFTWARE
     # q_swap = 0.12  # Probability of performing swaps in the SRS protocol
+    max_links_swapped = 10  #  Maximum number of elementary links swapped
     max_links_swapped = 10  #  Maximum number of elementary links swapped
     # p_cons = 0  # Probability of virtual neighbors consuming a link per time step
     srs_configurations['q_swap'] = q_swap
@@ -938,6 +941,7 @@ def time_evolution_greedy(srs_configurations, circuit_dagtable, gate_list, qubit
     # 纠缠消耗ecost
 
     assert(schedule == 2)
+
 
     ecost = 0
     discard_entanglement_count = 0
@@ -1087,6 +1091,7 @@ def time_evolution_greedy(srs_configurations, circuit_dagtable, gate_list, qubit
                 some_gate_exe_flag = True
                 while some_gate_exe_flag:
                     vadj = virtual_adjacency_matrix(S)
+                    # print(vadj)
                     # execute_results, S = parallel_execute_remote_operation(current_remote_operation_info, S, vadj,
                     #                                                        max_links_swapped)
                     execute_results, S = execute_remote_operation_greedy_rank(current_remote_operation_info, S, vadj,
@@ -1123,6 +1128,7 @@ def time_evolution_greedy(srs_configurations, circuit_dagtable, gate_list, qubit
                             qubit2_loc = subcircuits_allocation[qubit_loc_subcircuit_dic[qubit2]]
                             current_remote_operation_info[gate_id] = [qubit1_loc, qubit2_loc]
         execution_schedule.append(this_step_operations)
+        print(this_step_operations)
         # current_gate = get_front_layer(qubit_executed_gate, circuit_dagtable, gate_list, executed_gate_list)
         current_gate = remotedag.get_front_layer()
         S, counts = cd.step_protocol_srs(S, p_gen, q_swap, p_swap, p_cons, cutoff, max_links_swapped, randomseed)
@@ -1767,130 +1773,131 @@ def time_evolution_old_only_remote_time(srs_configurations, circuit_dagtable, ga
 def time_evolution_old_only_remote_time_greedy(srs_configurations, circuit_dagtable, gate_list, qubit_loc_subcircuit_dic,
                                         subcircuits_allocation,
                                         remote_operations, schedule):
-    """
-    :param circuit_dagtable: 量子线路的dagtable, 用来配合get_front_layer获取当前最新需要执行的量子门
-    :param gate_list: 量子线路门列表，用于从id到门信息的映射
-    :param qubit_loc_dic: 量子比特到子线路的映射
-    :param subcircuit_allocation: 子线路的映射，sub_circuit到设备id（node 1， node 2...）
-    :param remote_operations: 远程操作列表
-    :param srs_config: srs协议的相关参数
-    :return:
-    """
-    # 返回值
-    # 纠缠消耗ecost
-    ecost = 0
-    discard_entanglement_count = 0
+        """
+        :param circuit_dagtable: 量子线路的dagtable, 用来配合get_front_layer获取当前最新需要执行的量子门
+        :param gate_list: 量子线路门列表，用于从id到门信息的映射
+        :param qubit_loc_dic: 量子比特到子线路的映射
+        :param subcircuit_allocation: 子线路的映射，sub_circuit到设备id（node 1， node 2...）
+        :param remote_operations: 远程操作列表
+        :param srs_config: srs协议的相关参数
+        :return:
+        """
+        # 返回值
+        # 纠缠消耗ecost
+        ecost = 0
+        discard_entanglement_count = 0
 
-    # TIME
-    time_step = 0
+        # TIME
+        time_step = 0
 
-    # 程序执行中判定
-    all_executed = False  # all_executed: 判断整个程序是否执行完，通过判定executed_gate_list是不是等于线路中的门的数目来判定
-    executed_gate_list = []  # executed_gate_list: 已经执行了的程序中的门
-    qubit_executed_gate = [-2 for _ in range(len(circuit_dagtable))]
-    # for gateslist in circuit_dagtable:
-    #     print(gateslist)
+        # 程序执行中判定
+        all_executed = False  # all_executed: 判断整个程序是否执行完，通过判定executed_gate_list是不是等于线路中的门的数目来判定
+        executed_gate_list = []  # executed_gate_list: 已经执行了的程序中的门
+        qubit_executed_gate = [-2 for _ in range(len(circuit_dagtable))]
+        # for gateslist in circuit_dagtable:
+        #     print(gateslist)
 
-    # 新的执行序列，包括远程操作的处理方案
-    execution_schedule = []
+        # 新的执行序列，包括远程操作的处理方案
+        execution_schedule = []
 
-    # TOPOLOGY
-    # Use any function main.adjacency_*() to define a topology.
-    A = srs_configurations['adj']
+        # TOPOLOGY
+        # Use any function main.adjacency_*() to define a topology.
+        A = srs_configurations['adj']
 
-    # HARDWARE
-    p_gen = srs_configurations['p_gen']  # Probability of successful entanglement generation
-    p_swap = srs_configurations['p_swap']  # Probability of successful swap
-    qbits_per_channel = srs_configurations['qubits']  # Number of qubits per node per physical neighbor
+        # HARDWARE
+        p_gen = srs_configurations['p_gen']  # Probability of successful entanglement generation
+        p_swap = srs_configurations['p_swap']  # Probability of successful swap
+        qbits_per_channel = srs_configurations['qubits']  # Number of qubits per node per physical neighbor
 
-    # SOFTWARE
-    q_swap = srs_configurations['q_swap']  # Probability of performing swaps in the SRS protocol
-    max_links_swapped = srs_configurations['max_swap']  #  Maximum number of elementary links swapped
-    p_cons = srs_configurations['p_cons']  # Probability of virtual neighbors consuming a link per time step
+        # SOFTWARE
+        q_swap = srs_configurations['q_swap']  # Probability of performing swaps in the SRS protocol
+        max_links_swapped = srs_configurations['max_swap']  #  Maximum number of elementary links swapped
+        p_cons = srs_configurations['p_cons']  # Probability of virtual neighbors consuming a link per time step
 
-    # CUTOFF
-    cutoff = srs_configurations['cutoff']
+        # CUTOFF
+        cutoff = srs_configurations['cutoff']
 
-    randomseed = srs_configurations['randomseed']
-    random.seed(randomseed)
-    np.random.seed(randomseed)
-    # 初始化纠缠链接
-    S = cd.create_qubit_registers(A, qbits_per_channel)
-    # print("Initial entanglement status:")
-    # show_entanglement_status(S)
+        randomseed = srs_configurations['randomseed']
+        random.seed(randomseed)
+        np.random.seed(randomseed)
+        # 初始化纠缠链接
+        S = cd.create_qubit_registers(A, qbits_per_channel)
+        # print("Initial entanglement status:")
+        # show_entanglement_status(S)
 
-    # 确定当前直接可以执行的量子门
-    #生成远程门的dag
-    qubit_cnt = len(circuit_dagtable)
-    remotedag = RemoteDag(qubit_cnt, remote_operations, gate_list, qubit_loc_subcircuit_dic)
+        # 确定当前直接可以执行的量子门
+        #生成远程门的dag
+        qubit_cnt = len(circuit_dagtable)
+        remotedag = RemoteDag(qubit_cnt, remote_operations, gate_list, qubit_loc_subcircuit_dic)
 
-    # 确定当前直接可以执行的量子门
-    current_gate = remotedag.get_front_layer()
-    # print("Initial current gates:")
-    # print(current_gate)
+        # 确定当前直接可以执行的量子门
+        current_gate = remotedag.get_front_layer()
+        # print("Initial current gates:")
+        # print(current_gate)
+
 
     # 除非线路执行完，否则循环不停止；设置一个时间界，超过该时间也强行停止
-    while len(current_gate) > 0:
-        # 本轮执行的门或执行方案
-        this_step_operations = [time_step]
+        while len(current_gate) > 0:
+            # 本轮执行的门或执行方案
+            this_step_operations = [time_step]
+            if schedule == 0 or schedule == 1:
+                # 执行远程操作
+                some_gate_exe_flag = True
+                while some_gate_exe_flag and current_gate:
 
-        
-        if schedule == 0 or schedule == 1:
-            # 执行远程操作
-            some_gate_exe_flag = True
-            while some_gate_exe_flag and current_gate:
-
-                # 初始化当前的远程量子操作, 通过gate_id获取门相应的量子比特，再将量子比特对应到子线路上，最后通过子线路的映射确定量子比特的具体node
-                current_remote_operation_info = {}
-                for gate_id in current_gate:
-                    # current_remote_operation_info[gate_id] = [qubit1_loc, qubit2_loc]
-                    # 这个字典存储的是当前远程操作的信息，key为gate_id，值为相应的量子比特所在的量子节点
-                    if gate_id in remote_operations:
-                        gate = gate_list[gate_id]
-                        qubit1 = gate.get_qubits()[0]
-                        qubit2 = gate.get_qubits()[1]
-                        qubit1_loc = subcircuits_allocation[qubit_loc_subcircuit_dic[qubit1]]
-                        qubit2_loc = subcircuits_allocation[qubit_loc_subcircuit_dic[qubit2]]
-                        current_remote_operation_info[gate_id] = [qubit1_loc, qubit2_loc]
+                    # 初始化当前的远程量子操作, 通过gate_id获取门相应的量子比特，再将量子比特对应到子线路上，最后通过子线路的映射确定量子比特的具体node
+                    current_remote_operation_info = {}
+                    for gate_id in current_gate:
+                        # current_remote_operation_info[gate_id] = [qubit1_loc, qubit2_loc]
+                        # 这个字典存储的是当前远程操作的信息，key为gate_id，值为相应的量子比特所在的量子节点
+                        if gate_id in remote_operations:
+                            gate = gate_list[gate_id]
+                            qubit1 = gate.get_qubits()[0]
+                            qubit2 = gate.get_qubits()[1]
+                            qubit1_loc = subcircuits_allocation[qubit_loc_subcircuit_dic[qubit1]]
+                            qubit2_loc = subcircuits_allocation[qubit_loc_subcircuit_dic[qubit2]]
+                            current_remote_operation_info[gate_id] = [qubit1_loc, qubit2_loc]
 
 
-                vadj = virtual_adjacency_matrix(S)
-                # execute_results, S = parallel_execute_remote_operation(current_remote_operation_info, S, vadj,
-                #                                                        max_links_swapped)
-                gate = gate_list[gate_id]
-                qubits = gate.get_qubits()
-                qubit1_loc = current_remote_operation_info[gate_id][0]
-                qubit2_loc = current_remote_operation_info[gate_id][1]
-                path = None
-                if schedule == 0:
-                    path, S = execute_remote_operation_shortest_path_old(qubit1_loc, qubit2_loc, S, vadj,
-                                                                            max_links_swapped)
-                elif schedule == 1:
-                    path, S = execute_remote_operation_random_path_old(qubit1_loc, qubit2_loc, S, vadj, 5)
-                some_gate_exe_flag = False
-                if path is not None:
-                    executed_gate_list.append(gate_id)
-                    remotedag.execute_gate(gate_id)
-                    ecost += len(path) / 2
-                    for qubit in qubits:
-                        qubit_executed_gate[qubit] = gate_id
-                    operation = [gate_id, path]
-                    this_step_operations.append(operation)
-                    some_gate_exe_flag = True
-                else:
-                    operation = [gate_id, 'not executed']
-                    this_step_operations.append(operation)
-                current_gate = remotedag.get_front_layer()
-        execution_schedule.append(this_step_operations)
-        #print(this_step_operations)
-        # current_gate = get_front_layer(qubit_executed_gate, circuit_dagtable, gate_list, executed_gate_list)
-        current_gate = remotedag.get_front_layer()
-        if current_remote_operation_info != {}:
-            S, counts = cd.step_protocol_srs(S, p_gen, q_swap, p_swap, p_cons, cutoff, max_links_swapped, randomseed)
-            time_step += 1
-            discard_entanglement_count += counts
-        # all_executed = check_all_executed(executed_gate_list, gate_list)
-    return ecost, time_step, execution_schedule, discard_entanglement_count
+                    vadj = virtual_adjacency_matrix(S)
+                    # execute_results, S = parallel_execute_remote_operation(current_remote_operation_info, S, vadj,
+                    #                                                        max_links_swapped)
+                    gate = gate_list[gate_id]
+                    qubits = gate.get_qubits()
+                    qubit1_loc = current_remote_operation_info[gate_id][0]
+                    qubit2_loc = current_remote_operation_info[gate_id][1]
+                    path = None
+                    if schedule == 0:
+                        path, S = execute_remote_operation_shortest_path_old(qubit1_loc, qubit2_loc, S, vadj,
+                                                                                max_links_swapped)
+                    elif schedule == 1:
+                        path, S = execute_remote_operation_random_path_old(qubit1_loc, qubit2_loc, S, vadj, 5)
+                    some_gate_exe_flag = False
+                    if path is not None:
+                        executed_gate_list.append(gate_id)
+                        remotedag.execute_gate(gate_id)
+                        ecost += len(path) / 2
+                        for qubit in qubits:
+                            qubit_executed_gate[qubit] = gate_id
+                        operation = [gate_id, path]
+                        this_step_operations.append(operation)
+                        some_gate_exe_flag = True
+                    else:
+                        operation = [gate_id, 'not executed']
+                        this_step_operations.append(operation)
+                    current_gate = remotedag.get_front_layer()
+            execution_schedule.append(this_step_operations)
+            print(this_step_operations)
+            # current_gate = get_front_layer(qubit_executed_gate, circuit_dagtable, gate_list, executed_gate_list)
+            current_gate = remotedag.get_front_layer()
+            if current_remote_operation_info != {}:
+                S, counts = cd.step_protocol_srs(S, p_gen, q_swap, p_swap, p_cons, cutoff, max_links_swapped, randomseed)
+                time_step += 1
+                discard_entanglement_count += counts
+            # all_executed = check_all_executed(executed_gate_list, gate_list)
+        return ecost, time_step, execution_schedule, discard_entanglement_count
+
+
 
 # print("Entanglement status at time %d:" % time_step)
 # show_entanglement_status(S)
@@ -1958,37 +1965,49 @@ def batch_srs_info():
 
 
 if __name__ == "__main__":
-    qasm_path = "/home/normaluser/fzchen/qnet_iwqos/qnet_iwqos/test_for_weight/rca_200.qasm"
+    # schedules = [0, 1]
+    # small_device_qubit_number = 5
+    # large_device_qubit_number = 40
+    # N_samples = 10
+    # for schedule in schedules:
+    #     batch_circuit_execution(schedule, N_samples, small_device_qubit_number, large_device_qubit_number)
+    # qasm_path = '../exp_circuit_benchmark/small_scale/cm82a_208.qasm'
+    import sys
+
+    # qasm_path = "/home/normaluser/fzchen/qnet_iwqos/qnet_iwqos/pra_benchmark/qaoa/qaoa_300.qasm"
+    # qasm_path = "/home/normaluser/fzchen/qnet_iwqos/qnet_iwqos/pra_benchmark/small_scale/cm42a_207.qasm"
+    qasm_path = "/home/normaluser/fzchen/qnet_iwqos/qnet_iwqos/pra_benchmark/qft/qft_300.qasm"
     remote_operations, circuit_dagtable, gate_list, subcircuits_communication, qubit_loc_subcircuit_dic, subcircuit_qubit_partitions = circuitPartition(
         qasm_path, device_qubit_number=40, randomseed=0)
-    # srs_configurations = srs_config_squared_hard(qubit_per_channel=1,  p_gen = 1, p_swap = 0.95, q_swap=0.12, p_cons = 0.95, cutoff=10, randomseed=random.seed())
-    #
-    srs_configurations = srs_config_chain(qubit_per_channel=1, p_gen=1, p_swap=0.95, q_swap=0.12, p_cons=0.25,
-                                                cutoff=10, randomseed=random.seed())
+    srs_configurations = srs_config_squared_hard(qubit_per_channel=1,  p_gen = 1, p_swap = 0.95, q_swap=0.12, p_cons = 0.05, cutoff=10, randomseed=0)
 
-    subcircuits_allocation = Hungarian_allocate_subcircuit(len(subcircuit_qubit_partitions),
-                                                                subcircuits_communication,
-                                                                srs_configurations['adj'])
+    subcircuits_allocation = trivial_allocate_subcircuit(len(subcircuit_qubit_partitions),
+                                                         subcircuits_communication,
+                                                         srs_configurations['adj'])
+    ecost, time_step, execution_schedule, discard_entanglement_count = time_evolution_old_only_remote_time_greedy(srs_configurations,
+                                                                                             circuit_dagtable,
+                                                                                             gate_list,
+                                                                                             qubit_loc_subcircuit_dic,
+                                                                                             subcircuits_allocation,
+                                                                                             remote_operations,
+                                                                                             schedule=0)
 
-    # subcircuits_allocation = trivial_allocate_subcircuit(len(subcircuit_qubit_partitions),
-    #                                                     subcircuits_communication,
-    #                                                     srs_configurations['adj'])
-    ecost, time_step, execution_schedule, discard_entanglement_count = time_evolution_greedy(srs_configurations,
-                                                                                            circuit_dagtable,
-                                                                                            gate_list,
-                                                                                            qubit_loc_subcircuit_dic,
-                                                                                            subcircuits_allocation,
-                                                                                            remote_operations,
-                                                                                            schedule=2, w='global', v=1)
-
-    # ecost, time_step, execution_schedule, discard_entanglement_count = time_evolution_greedy(srs_configurations,
+    # ecost, time_step, execution_schedule, discard_entanglement_count = time_evolution_old_only_remote_time_greedy(srs_configurations,
     #                                                                                          circuit_dagtable,
     #                                                                                          gate_list,
     #                                                                                          qubit_loc_subcircuit_dic,
     #                                                                                          subcircuits_allocation,
     #                                                                                          remote_operations,
-    #                                                                                          schedule=2)
-
+    #                                                                                          schedule=0)
+    #
+    ecost, time_step, execution_schedule, discard_entanglement_count = time_evolution_greedy(srs_configurations,
+                                                                                             circuit_dagtable,
+                                                                                             gate_list,
+                                                                                             qubit_loc_subcircuit_dic,
+                                                                                             subcircuits_allocation,
+                                                                                             remote_operations,
+                                                                                             2, 'global', 0)
+    #
     print(ecost, time_step, discard_entanglement_count)
     # cd_trial()
     # path = '../circuit_benchmark/qft/qft_newnew_100.qasm'

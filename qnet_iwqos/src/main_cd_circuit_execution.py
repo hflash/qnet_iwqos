@@ -22,6 +22,7 @@ import copy
 from queue import Queue
 import matplotlib.ticker as ticker
 import networkx as nx
+import heapq
 
 plt.rcParams['font.family'] = 'Arial'
 
@@ -236,31 +237,50 @@ def generate_all_links(S, p):
         for j in range(i + 1, n):
             # If there is a physical channel i-j:
             if not S[i][j] == 0:
-                # Find first available qubits
-                qubit_number_i = None
-                for m_i, qubit_i in enumerate(S[i][j]):
-                    if qubit_i == None:
-                        qubit_number_i = m_i
-                        break
-                qubit_number_j = None
-                for m_j, qubit_j in enumerate(S[j][i]):
-                    if qubit_j == None:
-                        qubit_number_j = m_j
-                        break
-                # ISSUE: could replace the previous loops by np.where, as
-                # in the following line. The problem is when S[i][j] has
-                # no 0 elements (i.e. all qubits i,j are occupied),
-                # which yields an error. To use the line below
-                # we must also change S[i][j] = [None]*r by
-                # S[i][j] = [0]*r in create_qubit_registers().
-                # qubit_number_i = np.where(np.asarray(S[i][j])==0)[0][0]
+                for _ in range(len(S[i][j])):
+                    # Find first available qubits
+                    # generate_link_pair = [[None, None] for i in range(len(S[i][j]))]
+                    qubit_number_i = None
+                    for m_i, qubit_i in enumerate(S[i][j]):
+                        if qubit_i == None:
+                            qubit_number_i = m_i
+                            # generate_link_pair[m_i][0] = m_i
+                            break
+                    qubit_number_j = None
+                    for m_j, qubit_j in enumerate(S[j][i]):
+                        if qubit_j == None:
+                            qubit_number_j = m_j
+                            # generate_link_pair[m_j][1] = m_j
+                            break
+                    # generate_link_pair = [[None, None] for i in range(len(S[i][j]))]
+                    # qubit_number_i = None
+                    # for m_i, qubit_i in enumerate(S[i][j]):
+                    #     if qubit_i == None:
+                    #         qubit_number_i = m_i
+                    #         generate_link_pair[m_i][0] = m_i
+                    #         # break
+                    # qubit_number_j = None
+                    # for m_j, qubit_j in enumerate(S[j][i]):
+                    #     if qubit_j == None:
+                    #         qubit_number_j = m_j
+                    #         generate_link_pair[m_j][1] = m_j
+                    #         # break
+                    # ISSUE: could replace the previous loops by np.where, as
+                    # in the following line. The problem is when S[i][j] has
+                    # no 0 elements (i.e. all qubits i,j are occupied),
+                    # which yields an error. To use the line below
+                    # we must also change S[i][j] = [None]*r by
+                    # S[i][j] = [0]*r in create_qubit_registers().
+                    # qubit_number_i = np.where(np.asarray(S[i][j])==0)[0][0]
 
-                # If there are qubits available in nodes i and j, and
-                # with probability p:
-                if ((not qubit_number_i == None) and (not qubit_number_j == None)
-                        and (np.random.rand() < p)):
-                    S[i][j][qubit_number_i] = [0, 0, [j, i, qubit_number_j]]
-                    S[j][i][qubit_number_j] = [0, 0, [i, j, qubit_number_i]]
+                    # If there are qubits available in nodes i and j, and
+                    # with probability p:
+                    if ((not qubit_number_i == None) and (not qubit_number_j == None)
+                            and (np.random.rand() < p)):
+                        # print(qubit_number_i, qubit_number_j)
+                        # assert qubit_number_i==qubit_number_j
+                        S[i][j][qubit_number_i] = [0, 0, [j, i, qubit_number_j]]
+                        S[j][i][qubit_number_j] = [0, 0, [i, j, qubit_number_i]]
     return S
 
 
@@ -339,6 +359,7 @@ def swap(S, qubit_id1, qubit_id2, randomseed, ps=1):
     S[i1][j1][m1] = None
     S[i2][j2][m2] = None
 
+    # print("SWAP succeed!")
     return S
 
 
@@ -405,9 +426,277 @@ def consume_fixed_rate(S, cons_rate):
     return S
 
 
+def virtual_adjacency_matrix(S):
+    num_nodes = len(S)
+    virtual_adj = np.zeros((num_nodes, num_nodes), dtype=int)
+    # virtual_link_age = np.zeros((num_nodes, num_nodes), dtype=int)
+    # virtual_link_swap_num = np.zeros((num_nodes, num_nodes), dtype=int)
+    for i in range(num_nodes):
+        for j in range(num_nodes):
+            if S[i][j] != 0 and S[i][j] is not None:
+                for entanglement in S[i][j]:
+                    if entanglement is not None:
+                        virtual_adj[i][entanglement[2][0]] += 1
+                        # 遍历到j节点的时候还会再加一次，因此不需要下面这一行
+                        # virtual_adj[entanglement[2][0]][i] += 1
+    return virtual_adj
+
+
+def calculate_algebraic_connectivity(S):
+    v_adj = virtual_adjacency_matrix(S)
+    v_adj_1 = np.zeros((len(v_adj), len(v_adj)), dtype=int)
+    for i in range(len(v_adj)):
+        for j in range(len(v_adj[i])):
+            if v_adj[i][j] == 0:
+                continue
+            else:
+                v_adj_1[i][j] = 1
+    degree_matrix = np.diag(np.sum(v_adj_1, axis=1))
+    # 计算拉普拉斯矩阵
+    laplacian_matrix = degree_matrix - v_adj_1
+    # 计算特征值，返回第二小的特征值
+    from scipy.linalg import eigh
+    eigenvalues = eigh(laplacian_matrix, eigvals_only=True)
+    original_connectivity = eigenvalues[1]
+    assert original_connectivity + 0.000000000001 >= 0
+    return original_connectivity
+
+
+def calculate_algebraic_connectivity_benefit(S, pair, randomseed=0):
+    # original_connectivity = calculate_algebraic_connectivity(S)
+    # import copy
+    # new_S = copy.deepcopy(S)
+    # node_i = pair[0]
+    # node_j = pair[1]
+    # new_S_after_swap = swap(new_S, node_i, node_j, randomseed)
+    # assert S != new_S_after_swap
+    # new_v_adj = virtual_adjacency_matrix(new_S_after_swap)
+    # new_connectivity = calculate_algebraic_connectivity(new_v_adj)
+    # return new_connectivity - original_connectivity
+    original_connectivity = calculate_algebraic_connectivity(S)
+    import copy
+    new_S = copy.deepcopy(S)
+    node_i = pair[0]
+    node_j = pair[1]
+    new_S_after_swap = swap(new_S, node_i, node_j, randomseed)
+    assert S != new_S_after_swap
+    # new_v_adj = virtual_adjacency_matrix(new_S_after_swap)
+    new_connectivity = calculate_algebraic_connectivity(new_S_after_swap)
+    benefit = new_connectivity - original_connectivity
+    # print("SWAP qubits:")
+    # print(pair)
+    # print(original_connectivity, new_connectivity, benefit)
+    return benefit
+
+
+def calculate_node_virtual_distances(S):
+    v_adj = virtual_adjacency_matrix(S)
+    # print(v_adj)
+    n = len(v_adj)
+
+    # 初始化距离矩阵
+    # 使用高维矩阵，将非相连的边初始化为1000
+    distance_matrix = np.full((n, n), 1000)
+
+    # 将邻接矩阵转为距离矩阵
+    for i in range(n):
+        for j in range(n):
+            if v_adj[i][j] >= 1:  # 如果存在边
+                distance_matrix[i][j] = 1  # 直接相连的节点距离为 1
+            if i == j:  # 自己到自己的距离为 0
+                distance_matrix[i][j] = 0
+
+    # 使用 Floyd-Warshall 算法更新距离矩阵
+    for k in range(n):
+        for i in range(n):
+            for j in range(n):
+                distance_matrix[i][j] = min(distance_matrix[i][j],
+                                            distance_matrix[i][k] + distance_matrix[k][j])
+
+    total_distances = 0
+    for i in range(len(distance_matrix)):
+        for j in range(len(distance_matrix[i])):
+            if distance_matrix[i][j] is not np.inf:
+                total_distances += distance_matrix[i][j]
+    # print(distance_matrix)
+    return total_distances
+
+
+def calculate_node_virtual_distance_benefit(S, pair, randomseed):
+    original_distances = calculate_node_virtual_distances(S)
+    import copy
+    new_S = copy.deepcopy(S)
+    node_i = pair[0]
+    node_j = pair[1]
+    new_S_after_swap = swap(new_S, node_i, node_j, randomseed)
+    assert S != new_S_after_swap
+    # new_v_adj = virtual_adjacency_matrix(new_S_after_swap)
+    new_distances = calculate_node_virtual_distances(new_S_after_swap)
+    benifit = original_distances - new_distances
+    # print(original_distances, new_distances, benifit)
+    return benifit
+
+
+def select_pairs(values, pairs):
+    # 创建优先队列，并将每个 (value, pair) 插入优先队列
+    max_heap = [(-value, pair) for value, pair in zip(values, pairs)]
+    heapq.heapify(max_heap)  # 转换为优先队列
+
+    used_elements = set()  # 用于标记已使用的 a 和 b
+    selected_pairs = []  # 存放被选中的 pairs
+
+    # 遍历优先队列
+    while max_heap:
+        neg_value, pair = heapq.heappop(max_heap)  # 取出最大值的 pair
+        a, b = pair
+
+        # 检查 a 和 b 是否已被使用
+        if a not in used_elements and b not in used_elements:
+            selected_pairs.append(pair)  # 选择这个 pair
+            used_elements.add(a)  # 标记 a 为已使用
+            used_elements.add(b)  # 标记 b 为已使用
+    # print(selected_pairs)
+    return selected_pairs
+
+
 # ---------------------------------------------------------------------------
 # ----------------------------- PROTOCOLS -----------------------------------
 # ---------------------------------------------------------------------------
+def step_protocol_cfs_connectivity_first_swap(S, p_gen, q_swap, p_swap, p_cons, cutoff, max_links_swapped, randomseed,
+                                              swap_mode):
+    '''cfs protocol: connectivity first swap
+    swap_mode: total_distance; algebraic_connectivity
+    total_distance for executing entanglement swapping with the swap that can decrease total distances of across all nodes
+    algebraic_connectivity for executing entanglement swapping with the swap that can increase algebraic connectivity of virtual adjacency matrix
+    '''
+
+    n = len(S)
+
+    S = advance_time(S)
+    discard_count = 0
+
+    S, count = cutoffs(S, cutoff)
+    discard_count += count
+
+    # Generate links on every available qubit (1 per physical channel)
+    S = generate_all_links(S, p_gen)
+    # print("After generate:")
+    # print(virtual_adjacency_matrix(S))
+
+    random.seed(randomseed)
+    np.random.seed(randomseed)
+
+    # Perform swaps
+    if q_swap > 0:
+        node_list = np.random.permutation(np.arange(n))  # This does not need
+        # to be a random permutation
+
+        # Each node chooses a random pair
+        pairs_list = [[] for _ in range(n)]
+        for i in node_list:
+            # Find all occupied qubits in node i
+            # pairs_list_current: 所有可能的swap pair
+            pairs_list_current = []
+            # pair_list_good: 有正收益的swap pair
+            pair_list_good = []
+            value_list_good = []
+            occupied_qubits_i = []
+            for z in range(n):
+                # If qubit address (i,z,-) exists
+                if not S[i][z] == 0:
+                    for m, qubit in enumerate(S[i][z]):
+                        # If qubit is occupied:
+                        if not qubit is None:
+                            occupied_qubits_i += [(z, m)]
+            if len(occupied_qubits_i) > 1:
+                # Pick occupied qubit connected to node j
+                for qubit_i in range(len(occupied_qubits_i)):
+                    for qubit_j in range(qubit_i, len(occupied_qubits_i)):
+                        if qubit_i != qubit_j:
+                            pairs_list_current.append([occupied_qubits_i[qubit_i], occupied_qubits_i[qubit_j]])
+                # random.shuffle(occupied_qubits_i)
+                # qubit_1 = occupied_qubits_i[0]
+                # j = S[i][qubit_1[0]][qubit_1[1]][2][0]
+                # Pick occupied qubit connected to node k!=j, with A_jk=0
+                # for qubit_2 in occupied_qubits_i:
+                #     k = S[i][qubit_2[0]][qubit_2[1]][2][0]
+                #     if ((not k == j) and
+                #             (S[j][k] == 0)):  # A_jk=0 is equivalent to S_jk=0
+                #         pairs_list[i] = [qubit_1, qubit_2]
+                #         break
+            benifits = []
+            if swap_mode == 'total_distance':
+                for pair in pairs_list_current:
+                    swap_pair = [[i, pair[0][0], pair[0][1]],
+                                 [i, pair[1][0], pair[1][1]]]
+                    benifits.append(calculate_node_virtual_distance_benefit(S, swap_pair, randomseed=0))
+            elif swap_mode == 'algebraic_connectivity':
+                for pair in pairs_list_current:
+                    swap_pair = [[i, pair[0][0], pair[0][1]],
+                                 [i, pair[1][0], pair[1][1]]]
+                    benifits.append(calculate_algebraic_connectivity_benefit(S, swap_pair, randomseed=0))
+                    # print()
+            else:
+                print("unsupported swap mode")
+            for m, value in enumerate(benifits):
+                assert len(benifits) == len(pairs_list_current)
+                if value > 0:
+                    value_list_good.append(value)
+                    pair_list_good.append(pairs_list_current[m])
+                    # print(pairs_list_current[m])
+            if len(pair_list_good) >= 1:
+                pairs_list[i] = select_pairs(benifits, pairs_list_current)
+            # print(virtual_adjacency_matrix(S))
+            for pair in pairs_list[i]:
+                swap_pair = [[i, pair[0][0], pair[0][1]],
+                             [i, pair[1][0], pair[1][1]]]
+                if (swap_mode == "total_distance" and calculate_node_virtual_distance_benefit(S, swap_pair,
+                                                                                              randomseed=randomseed) > 0) or (
+                        swap_mode == "algebraic_connectivity" and calculate_algebraic_connectivity_benefit(S, swap_pair,
+                                                                                                           randomseed=randomseed) > 0):
+                    S = swap(S, swap_pair[0],
+                             swap_pair[1],
+                             ps=p_swap, randomseed=randomseed)
+                    # print("SWAP pair:")
+                    # print(swap_pair)
+                else:
+                    continue
+        # Each node attempts the swap
+        # for i in node_list:
+        #     # Perform a single swap
+        #     if not pairs_list[i] is None:
+        #         if np.random.rand() < q_swap:
+        #             S = swap(S, [i, pairs_list[i][0][0], pairs_list[i][0][1]],
+        #                      [i, pairs_list[i][1][0], pairs_list[i][1][1]],
+        #                      ps=p_swap, randomseed=randomseed)
+        # print("After SWAP:")
+        # print(virtual_adjacency_matrix(S))
+        # for i in node_list:
+        #     if not pairs_list[i] is None:
+        #         for pair in pairs_list[i]:
+        #             print(pair)
+        # S = swap(S, [i, pair[0][0], pair[0][1]],
+        #                      [i, pair[1][0], pair[1][1]],
+        #                      ps=p_swap, randomseed=randomseed)
+        # print(virtual_adjacency_matrix(S))
+    if p_swap < 1:
+        S, count = cutoffs(S, cutoff + 10)  # We need to remove links from failed swaps,
+        # which are links with infinite age. We need
+        # to give them this age as a placeholder so
+        # that all nodes can perform swaps at the
+        # same time although in our simulation they
+        # do this sequentally
+        discard_count += count
+    # Remove links that are too long
+    # if q_swap > 0:
+    S, count = remove_long_links(S, max_links_swapped)
+    discard_count += count
+    # Consume links
+    S = consume_fixed_rate(S, p_cons)
+
+    return S, discard_count
+
+
 def step_protocol_srs(S, p_gen, q_swap, p_swap, p_cons, cutoff, max_links_swapped, randomseed):
     '''SRS protocol: Single Random Swap'''
     n = len(S)
@@ -559,10 +848,161 @@ def step_protocol_ndsrs(S, p_gen, q_swap_vec, p_swap, p_cons, cutoff, max_links_
 # ---------------------------------------------------------------------------
 # ----------------------------- SIMULATIONS ---------------------------------
 # ---------------------------------------------------------------------------
+def simulation_cd_cfs(protocol, A, p_gen, q_swap, p_swap, p_cons, cutoff, M, qbits_per_channel, N_samples, total_time,
+                      swap_mode, randomseed,
+                      progress_bar=None, return_data='avg'):
+    ''' ---Inputs---
+            · protocol: (str) protocol to be run ('srs' or 'ndsrs' or 'cfs).
+            · A:    (array) physical adjacency matrix.
+            · p_gen: (float) probability of successful entanglement generation.
+            · q_swap:   (float) probability that a swap is attempted. In the 'ndsrs',
+                        this has to be a list of length len(A).
+            · p_swap:   (float) probability of successful swap.
+            · p_cons:   (float) probability of link consumption.
+            · cutoff:   (int) cutoff time.
+            · M:    (int) maximum swap length.
+            · qbits_per_channel:    (int) number of qubits per node reserved
+                                    for each physical channel.
+            · N_samples:    (int) number of samples.
+            · total_time:
+            · progress_bar: (str) None, 'notebook', or 'terminal'.
+            · return_data:  (str) 'avg' or 'all'.
+        ---Outputs---
+            '''
+    n = len(A)
+    if progress_bar == None:
+        _tqdm = lambda *x, **kwargs: x[0]
+    elif progress_bar == 'notebook':
+        _tqdm = tqdmn
+    elif progress_bar == 'terminal':
+        _tqdm = tqdm
+    else:
+        raise ValueError('Invalid progress_bar')
+
+    # Calculate physical degrees
+    pdegrees = physical_degrees(A)
+    # randomseed = randomseed
+    if return_data == 'all':
+        # Initialize time-dependent node-dependent virtual quantities
+        vdegrees = [[[None for _ in range(N_samples)] for _ in range(total_time)] for _ in range(n)]
+        vneighs = [[[None for _ in range(N_samples)] for _ in range(total_time)] for _ in range(n)]
+        # ISSUE: If there is an error, may need to uncomment the four lines below
+        # avg_vdegrees = [[0 for _ in range(total_time+1)] for _ in range(n)]
+        # avg_vneighs = [[0 for _ in range(total_time+1)] for _ in range(n)]
+        # std_vdegrees = [[0 for _ in range(total_time+1)] for _ in range(n)]
+        # std_vneighs = [[0 for _ in range(total_time+1)] for _ in range(n)]
+        for sample in _tqdm(range(N_samples), 'Samples', leave=False):
+            S = create_qubit_registers(A, qbits_per_channel)
+            for t in range(0, total_time):
+                if protocol == 'cfs':
+                    S = step_protocol_cfs_connectivity_first_swap(S, p_gen, q_swap, p_swap, p_cons, cutoff, M,
+                                                                  randomseed, swap_mode)
+                    # print(virtual_adjacency_matrix(S))
+                else:
+                    raise ValueError('Protocol not implemented')
+                for node in range(n):
+                    vdeg, vneigh, _, _ = virtual_properties(S, node)
+                    vdegrees[node][t][sample] = vdeg
+                    vneighs[node][t][sample] = vneigh
+        # avg_vdegrees = np.mean(vdegrees, axis=2)
+        # avg_vneighs = np.mean(vneighs, axis=2)
+        # std_vdegrees = np.std(vdegrees, axis=2)
+        # std_vneighs = np.std(vneighs, axis=2)
+
+        return vdegrees, vneighs, None, None
+
+    if return_data == 'avg':
+        # Initialize time-dependent node-dependent virtual quantities
+        avg_vdegrees = [[None for _ in range(total_time)] for _ in range(n)]
+        avg_vneighs = [[None for _ in range(total_time)] for _ in range(n)]
+        std_vdegrees = [[None for _ in range(total_time)] for _ in range(n)]
+        std_vneighs = [[None for _ in range(total_time)] for _ in range(n)]
+
+        # First sample
+        S = create_qubit_registers(A, qbits_per_channel)
+        for t in range(0, total_time):
+            if protocol == 'cfs':
+                # print("time: " + str(t))
+                S, count = step_protocol_cfs_connectivity_first_swap(S, p_gen, q_swap, p_swap, p_cons, cutoff, M,
+                                                                     randomseed, swap_mode)
+                # print(virtual_adjacency_matrix(S))
+            else:
+                raise ValueError('Protocol not implemented')
+            for node in range(n):
+                vdeg, vneigh, vneighborhood, _ = virtual_properties(S, node)
+                # print("simulation_cd_for_virtual_neighbors_cfs" + str(vneighborhood))
+                avg_vdegrees[node][t] = vdeg
+                avg_vneighs[node][t] = vneigh
+                std_vdegrees[node][t] = 0
+                std_vneighs[node][t] = 0
+
+        # Rest of the samples
+        for sample in _tqdm(range(N_samples - 1), 'Samples', leave=False):
+            S = create_qubit_registers(A, qbits_per_channel)
+            for t in range(0, total_time):
+                if protocol == 'cfs':
+                    S, count = step_protocol_cfs_connectivity_first_swap(S, p_gen, q_swap, p_swap, p_cons, cutoff, M,
+                                                                  randomseed, swap_mode)
+                    # print(virtual_adjacency_matrix(S))
+                else:
+                    raise ValueError('Protocol not implemented')
+                for node in range(n):
+                    vdeg, vneigh, _, _ = virtual_properties(S, node)
+                    std_vdegrees[node][t] = np.sqrt(std_vdegrees[node][t] ** 2 *
+                                                    (sample) / (sample + 1) + sample * (avg_vdegrees[node][t]
+                                                                                        - vdeg) ** 2 / (
+                                                            sample + 1) ** 2)
+                    std_vneighs[node][t] = np.sqrt(std_vneighs[node][t] ** 2 *
+                                                   sample / (sample + 1) + sample * (avg_vneighs[node][t]
+                                                                                     - vneigh) ** 2 / (sample + 1) ** 2)
+                    avg_vdegrees[node][t] = avg_vdegrees[node][t] * sample / (sample + 1) + vdeg / (sample + 1)
+                    avg_vneighs[node][t] = avg_vneighs[node][t] * sample / (sample + 1) + vneigh / (sample + 1)
+
+        # Note that we do not store all samples. Instead, we update the mean and
+        # the std on the fly. The correctness of this way of updating these values
+        # can be checked with the following code:
+        ## x_vec = np.random.rand(10)
+        ## std = None
+        ## mean = None
+        ## for idx, x in enumerate(x_vec):
+        ##     if std == None and mean == None:
+        ##         std = 0
+        ##         mean = x
+        ##     else:
+        ##         N = idx+1
+        ##         std = np.sqrt(std**2 * (N-1)/N + (N-1) * (mean-x)**2 / N**2)
+        ##         mean = mean * (N-1)/N + x/N
+        ## print(np.mean(x_vec),np.std(x_vec))
+        ## print(mean, std)
+
+        ## OLD IMPLEMENTATION storing all samples:
+        # vdegrees = [[[None for _ in range(N_samples)] for _ in range(total_time)] for _ in range(n)]
+        # vneighs = [[[None for _ in range(N_samples)] for _ in range(total_time)] for _ in range(n)]
+        # for sample in _tqdm(range(N_samples), 'Samples', leave=False):
+        #     S = create_qubit_registers(A, qbits_per_channel)
+        #     for t in range(0,total_time):
+        #         if protocol=='rprs':
+        #             S = step_protocol_rprs(S, p_gen, q_swap, p_swap, p_cons, cutoff, M)
+        #         elif protocol=='srs':
+        #             S = step_protocol_srs(S, p_gen, q_swap, p_swap, p_cons, cutoff, M)
+        #         else:
+        #             raise ValueError('Protocol not implemented')
+        #         for node in range(n):
+        #             vdeg, vneigh, _, _ = virtual_properties(S, node)
+        #             vdegrees[node][t][sample] = vdeg
+        #             vneighs[node][t][sample] = vneigh
+        # avg_vdegrees = np.mean(vdegrees, axis=2)
+        # avg_vneighs = np.mean(vneighs, axis=2)
+        # std_vdegrees = np.std(vdegrees, axis=2)
+        # std_vneighs = np.std(vneighs, axis=2)
+
+        return avg_vdegrees, avg_vneighs, std_vdegrees, std_vneighs
+
+
 def simulation_cd(protocol, A, p_gen, q_swap, p_swap, p_cons, cutoff, M, qbits_per_channel, N_samples, total_time,
                   progress_bar=None, return_data='avg'):
     ''' ---Inputs---
-            · protocol: (str) protocol to be run ('srs' or 'ndsrs').
+            · protocol: (str) protocol to be run ('srs' or 'ndsrs' or 'cfs).
             · A:    (array) physical adjacency matrix.
             · p_gen: (float) probability of successful entanglement generation.
             · q_swap:   (float) probability that a swap is attempted. In the 'ndsrs',
@@ -613,6 +1053,7 @@ def simulation_cd(protocol, A, p_gen, q_swap, p_swap, p_cons, cutoff, M, qbits_p
                     raise ValueError('Protocol not implemented')
                 for node in range(n):
                     vdeg, vneigh, _, _ = virtual_properties(S, node)
+                    assert vdeg == vneigh
                     vdegrees[node][t][sample] = vdeg
                     vneighs[node][t][sample] = vneigh
         # avg_vdegrees = np.mean(vdegrees, axis=2)
@@ -708,10 +1149,11 @@ def simulation_cd(protocol, A, p_gen, q_swap, p_swap, p_cons, cutoff, M, qbits_p
         return avg_vdegrees, avg_vneighs, std_vdegrees, std_vneighs
 
 
-def simulation_cd_for_virtual_neighbors(protocol, A, p_gen, q_swap, p_swap, p_cons, cutoff, M, qbits_per_channel, N_samples, total_time,
-                  randomseed, progress_bar=None, return_data='all'):
+def simulation_cd_for_virtual_neighbors(protocol, A, p_gen, q_swap, p_swap, p_cons, cutoff, M, qbits_per_channel,
+                                        N_samples, total_time,
+                                        randomseed, progress_bar=None, return_data='all'):
     ''' ---Inputs---
-            · protocol: (str) protocol to be run ('srs' or 'ndsrs').
+            · protocol: (str) protocol to be run ('srs' or 'ndsrs' or cfs).
             · A:    (array) physical adjacency matrix.
             · p_gen: (float) probability of successful entanglement generation.
             · q_swap:   (float) probability that a swap is attempted. In the 'ndsrs',
@@ -777,7 +1219,75 @@ def simulation_cd_for_virtual_neighbors(protocol, A, p_gen, q_swap, p_swap, p_co
         return vdegrees, vneighs, vneighborhoods, None
 
 
+def simulation_cd_for_virtual_neighbors_cfs(protocol, A, p_gen, q_swap, p_swap, p_cons, cutoff, M, qbits_per_channel,
+                                            N_samples, total_time, swap_mode,
+                                            randomseed, progress_bar=None, return_data='all'):
+    ''' ---Inputs---
+            · protocol: (str) protocol to be run ('srs' or 'ndsrs' or cfs).
+            · A:    (array) physical adjacency matrix.
+            · p_gen: (float) probability of successful entanglement generation.
+            · q_swap:   (float) probability that a swap is attempted. In the 'ndsrs',
+                        this has to be a list of length len(A).
+            · p_swap:   (float) probability of successful swap.
+            · p_cons:   (float) probability of link consumption.
+            · cutoff:   (int) cutoff time.
+            · M:    (int) maximum swap length.
+            · qbits_per_channel:    (int) number of qubits per node reserved
+                                    for each physical channel.
+            · N_samples:    (int) number of samples.
+            · total_time:
+            · progress_bar: (str) None, 'notebook', or 'terminal'.
+            · return_data:  (str) 'avg' or 'all'.
+        ---Outputs---
+            '''
+    n = len(A)
+    if progress_bar == None:
+        _tqdm = lambda *x, **kwargs: x[0]
+    elif progress_bar == 'notebook':
+        _tqdm = tqdmn
+    elif progress_bar == 'terminal':
+        _tqdm = tqdm
+    else:
+        raise ValueError('Invalid progress_bar')
 
+    # np.random.seed(randomseed)
+    # Calculate physical degrees
+    pdegrees = physical_degrees(A)
+
+    if return_data == 'all':
+        # Initialize time-dependent node-dependent virtual quantities
+        vdegrees = [[[None for _ in range(N_samples)] for _ in range(total_time)] for _ in range(n)]
+        vneighs = [[[None for _ in range(N_samples)] for _ in range(total_time)] for _ in range(n)]
+        vneighborhoods = [[[None for _ in range(N_samples)] for _ in range(total_time)] for _ in range(n)]
+
+        # ISSUE: If there is an error, may need to uncomment the four lines below
+        # avg_vdegrees = [[0 for _ in range(total_time+1)] for _ in range(n)]
+        # avg_vneighs = [[0 for _ in range(total_time+1)] for _ in range(n)]
+        # std_vdegrees = [[0 for _ in range(total_time+1)] for _ in range(n)]
+        # std_vneighs = [[0 for _ in range(total_time+1)] for _ in range(n)]
+        for sample in _tqdm(range(N_samples), 'Samples', leave=False):
+            S = create_qubit_registers(A, qbits_per_channel)
+            for t in range(0, total_time):
+                if protocol == 'cfs':
+                    S, count = step_protocol_cfs_connectivity_first_swap(S, p_gen, q_swap, p_swap, p_cons, cutoff, M,
+                                                                         randomseed, swap_mode)
+                    # print("time: " + str(t))
+                    # print(virtual_adjacency_matrix(S))
+                else:
+                    raise ValueError('Protocol not implemented')
+                for node in range(n):
+                    vdeg, vneigh, vneighborhood, vneigh_links = virtual_properties(S, node)
+                    vdegrees[node][t][sample] = vdeg
+                    vneighs[node][t][sample] = vneigh
+                    # print("simulation_cd_for_virtual_neighbors_cfs" + str(vneighborhood))
+                    vneighborhoods[node][t][sample] = vneighborhood
+        # avg_vdegrees = np.mean(vdegrees, axis=2)
+        # avg_vneighs = np.mean(vneighs, axis=2)
+        # std_vdegrees
+        # = np.std(vdegrees, axis=2)
+        # std_vneighs = np.std(vneighs, axis=2)
+
+        return vdegrees, vneighs, vneighborhoods, None
 
 
 # ---------------------------------------------------------------------------
@@ -803,6 +1313,7 @@ def virtual_properties(S, node):
                     if not S[node][j][m][2][0] in vneighborhood:
                         vneighborhood.add(S[node][j][m][2][0])
                         vneigh += 1
+    # print("virtual_properties: node" + str(node) + " " + str(vneighborhood))
     return vdeg, vneigh, list(vneighborhood), vneigh_links
 
 

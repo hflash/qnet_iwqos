@@ -113,7 +113,7 @@ if __name__ == "__main__":
     small_device_qubit_number = 5
     large_device_qubit_number = 40
     # qubit_per_channels = [1, 3, 5]
-    qubit_per_channels = [1]
+    qubit_per_channels = [1, 3]
     N_samples = 1
     # data = []
     # data_cal = 0
