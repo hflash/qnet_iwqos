@@ -15,6 +15,8 @@
 # @Author   : HFLASH @ LINKE
 # @File     : srs_data.py
 # @Software : PyCharm
+import os.path
+
 import numpy as np
 
 
@@ -49,3 +51,15 @@ def get_virtual_adjacency_matrix_of_3x3(qubit_per_channel):
                          [0.1207, 0.029, 0.0016, 0.9972, 0.2613, 0.028, 0.0, 0.9963, 0.1347],
                          [0.0276, 0.0807, 0.0293, 0.4182, 0.9982, 0.4012, 0.9963, 0.0, 0.9977],
                          [0.0012, 0.0212, 0.1267, 0.0261, 0.2627, 0.9981, 0.1347, 0.9977, 0.0]])
+
+def get_cfs_virtual_adjacency_matrix_of_chain(qubit_per_channel, cutoff, p_cons,
+    p_swap,
+    q_swap,
+    swap_mode):
+    para = f"{swap_mode}_qswap_{q_swap:.2f}_qubit_per_channel_{qubit_per_channel}_p_swap{p_swap:.2f}_p_cons{p_cons:.2f}_cutoff_{cutoff}.npy"
+    root_path = "/home/normaluser/hflash/qnet_iwqos/prototol_virtual_matrix_data"
+    data_path = os.path.join(root_path, para)
+    if not os.path.exists(data_path):
+        data_matrix = np.load(data_path)
+    return data_matrix
+
