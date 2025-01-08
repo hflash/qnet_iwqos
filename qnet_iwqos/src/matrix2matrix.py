@@ -26,6 +26,7 @@ def map_nodes(graph_A, graph_B):
     for i in range(len(padded_graph_A)):
         a=[]
         for j in range(len(padded_graph_A)):
+            # if A_list[i] = 0
             a.append(abs(A_list[i]-B_list[j]))
         new_mat.append(a)
     row_ind, col_ind = linear_sum_assignment(new_mat)

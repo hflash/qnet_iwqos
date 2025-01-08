@@ -20,17 +20,39 @@ import os.path
 import numpy as np
 
 
-def get_cfs_virtual_adjacency_matrix_of_chain(qubit_per_channel, cutoff, p_cons,
-    p_swap,
-    q_swap,
-    swap_mode):
+def get_cfs_virtual_adjacency_matrix_of_grid(qubit_per_channel, cutoff, p_cons,
+                                              p_swap,
+                                              q_swap,
+                                              swap_mode):
     para = f"{swap_mode}_qswap_{q_swap:.2f}_qubit_per_channel_{qubit_per_channel}_p_swap{p_swap:.2f}_p_cons{p_cons:.2f}_cutoff_{cutoff}.npy"
     root_path = "/home/normaluser/hflash/qnet_iwqos/prototol_virtual_matrix_data"
     data_path = os.path.join(root_path, para)
-    if not os.path.exists(data_path):
+    if os.path.exists(data_path):
+        data_matrix = np.load(data_path)
+        return data_matrix
+    else:
+        print("Path not exists!")
+
+def get_cfs_virtual_adjacency_matrix_of_chain(qubit_per_channel, cutoff, p_cons,
+                                              p_swap,
+                                              q_swap,
+                                              swap_mode):
+    para = f"{swap_mode}_qswap_{q_swap:.2f}_qubit_per_channel_{qubit_per_channel}_p_swap{p_swap:.2f}_p_cons{p_cons:.2f}_cutoff_{cutoff}.npy"
+    root_path = "/home/normaluser/hflash/qnet_iwqos/prototol_virtual_matrix_data_chain"
+    data_path = os.path.join(root_path, para)
+    print(data_path)
+    if os.path.exists(data_path):
         data_matrix = np.load(data_path)
         return data_matrix
     else:
         print("Path not exists!")
 
 
+# print(get_cfs_virtual_adjacency_matrix_of_grid(qubit_per_channel = 3, cutoff = 7, p_cons = 0.35,
+#                                               p_swap = 0.95,
+#                                               q_swap = 0.30,
+#                                               swap_mode = "algebraic_connectivity"))
+# print(get_cfs_virtual_adjacency_matrix_of_chain(qubit_per_channel = 1, cutoff = 10, p_cons = 0.05,
+#                                               p_swap = 0.50,
+#                                               q_swap = 0.30,
+#                                               swap_mode = "algebraic_connectivity"))

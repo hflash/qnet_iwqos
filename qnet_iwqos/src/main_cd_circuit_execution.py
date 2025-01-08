@@ -318,7 +318,7 @@ def cutoffs(S, cutoff):
     return S, count
 
 
-def swap(S, qubit_id1, qubit_id2, randomseed, ps=1):
+def swap(S, qubit_id1, qubit_id2, ps, randomseed):
     '''Performs a probabilistic swap using the input qubits. Failed swaps
         produce a link with infinite age.
         ---Inputs---
@@ -333,8 +333,8 @@ def swap(S, qubit_id1, qubit_id2, randomseed, ps=1):
                             physical link towards which qubit 2 is oriented;
                             and index of qubit 2 in the physical link.
             · ps:   (float) probability of successful swap.'''
-    random.seed(randomseed)
-    np.random.seed(randomseed)
+    # random.seed(randomseed)
+    # np.random.seed(randomseed)
     i1, j1, m1 = qubit_id1
     i2, j2, m2 = qubit_id2
     assert S[i1][j1], 'No qubit register [i1, j1]'
@@ -412,13 +412,16 @@ def consume_fixed_rate(S, cons_rate):
                         break
                 # Consume probabilistically if cons_rate < 1 or if
                 # cons_rate is not an integer
-                if np.random.rand() < cons_rate - np.floor(cons_rate):
+                rand = np.random.rand()
+                # print(rand)
+                if rand < cons_rate - np.floor(cons_rate):
                     k += 1
                     if k < len(cons_order):
                         cons_label = cons_order[k]
                         cons_qubit1 = vneigh_links[node2][cons_label]
                         cons_qubit2 = S[node1][cons_qubit1[1]][cons_qubit1[2]][2]
                         # Consume
+                        # print(cons_qubit1, cons_qubit2)
                         S[node1][cons_qubit1[1]][cons_qubit1[2]] = None
                         S[node2][cons_qubit2[1]][cons_qubit2[2]] = None
 
@@ -462,7 +465,7 @@ def calculate_algebraic_connectivity(S):
     return original_connectivity
 
 
-def calculate_algebraic_connectivity_benefit(S, pair, randomseed=0):
+def calculate_algebraic_connectivity_benefit(S, pair, ps, randomseed=0):
     # original_connectivity = calculate_algebraic_connectivity(S)
     # import copy
     # new_S = copy.deepcopy(S)
@@ -478,7 +481,7 @@ def calculate_algebraic_connectivity_benefit(S, pair, randomseed=0):
     new_S = copy.deepcopy(S)
     node_i = pair[0]
     node_j = pair[1]
-    new_S_after_swap = swap(new_S, node_i, node_j, randomseed)
+    new_S_after_swap = swap(new_S, node_i, node_j, ps, randomseed)
     assert S != new_S_after_swap
     # new_v_adj = virtual_adjacency_matrix(new_S_after_swap)
     new_connectivity = calculate_algebraic_connectivity(new_S_after_swap)
@@ -522,13 +525,13 @@ def calculate_node_virtual_distances(S):
     return total_distances
 
 
-def calculate_node_virtual_distance_benefit(S, pair, randomseed):
+def calculate_node_virtual_distance_benefit(S, pair, ps, randomseed):
     original_distances = calculate_node_virtual_distances(S)
     import copy
     new_S = copy.deepcopy(S)
     node_i = pair[0]
     node_j = pair[1]
-    new_S_after_swap = swap(new_S, node_i, node_j, randomseed)
+    new_S_after_swap = swap(new_S, node_i, node_j, ps, randomseed)
     assert S != new_S_after_swap
     # new_v_adj = virtual_adjacency_matrix(new_S_after_swap)
     new_distances = calculate_node_virtual_distances(new_S_after_swap)
@@ -583,8 +586,8 @@ def step_protocol_cfs_connectivity_first_swap(S, p_gen, q_swap, p_swap, p_cons, 
     # print("After generate:")
     # print(virtual_adjacency_matrix(S))
 
-    random.seed(randomseed)
-    np.random.seed(randomseed)
+    # random.seed(randomseed)
+    # np.random.seed(randomseed)
 
     # Perform swaps
     if q_swap > 0:
@@ -629,12 +632,12 @@ def step_protocol_cfs_connectivity_first_swap(S, p_gen, q_swap, p_swap, p_cons, 
                 for pair in pairs_list_current:
                     swap_pair = [[i, pair[0][0], pair[0][1]],
                                  [i, pair[1][0], pair[1][1]]]
-                    benifits.append(calculate_node_virtual_distance_benefit(S, swap_pair, randomseed=0))
+                    benifits.append(calculate_node_virtual_distance_benefit(S, swap_pair, ps = p_swap, randomseed=0))
             elif swap_mode == 'algebraic_connectivity':
                 for pair in pairs_list_current:
                     swap_pair = [[i, pair[0][0], pair[0][1]],
                                  [i, pair[1][0], pair[1][1]]]
-                    benifits.append(calculate_algebraic_connectivity_benefit(S, swap_pair, randomseed=0))
+                    benifits.append(calculate_algebraic_connectivity_benefit(S, swap_pair, ps = p_swap, randomseed=0))
                     # print()
             else:
                 print("unsupported swap mode")
@@ -650,9 +653,9 @@ def step_protocol_cfs_connectivity_first_swap(S, p_gen, q_swap, p_swap, p_cons, 
             for pair in pairs_list[i]:
                 swap_pair = [[i, pair[0][0], pair[0][1]],
                              [i, pair[1][0], pair[1][1]]]
-                if (swap_mode == "total_distance" and calculate_node_virtual_distance_benefit(S, swap_pair,
+                if (swap_mode == "total_distance" and calculate_node_virtual_distance_benefit(S, swap_pair, p_swap,
                                                                                               randomseed=randomseed) > 0) or (
-                        swap_mode == "algebraic_connectivity" and calculate_algebraic_connectivity_benefit(S, swap_pair,
+                        swap_mode == "algebraic_connectivity" and calculate_algebraic_connectivity_benefit(S, swap_pair, p_swap,
                                                                                                            randomseed=randomseed) > 0):
                     S = swap(S, swap_pair[0],
                              swap_pair[1],
@@ -710,8 +713,8 @@ def step_protocol_srs(S, p_gen, q_swap, p_swap, p_cons, cutoff, max_links_swappe
     # Generate links on every available qubit (1 per physical channel)
     S = generate_all_links(S, p_gen)
 
-    random.seed(randomseed)
-    np.random.seed(randomseed)
+    # random.seed(randomseed)
+    # np.random.seed(randomseed)
 
     # Perform swaps
     if q_swap > 0:
@@ -1180,7 +1183,7 @@ def simulation_cd_for_virtual_neighbors(protocol, A, p_gen, q_swap, p_swap, p_co
     else:
         raise ValueError('Invalid progress_bar')
 
-    np.random.seed(randomseed)
+    # np.random.seed(randomseed)
     # Calculate physical degrees
     pdegrees = physical_degrees(A)
 
