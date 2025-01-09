@@ -57,7 +57,7 @@ def get_cfs_virtual_adjacency_matrix_of_chain(qubit_per_channel, cutoff, p_cons,
     q_swap,
     swap_mode):
     para = f"{swap_mode}_qswap_{q_swap:.2f}_qubit_per_channel_{qubit_per_channel}_p_swap{p_swap:.2f}_p_cons{p_cons:.2f}_cutoff_{cutoff}.npy"
-    root_path = "/home/normaluser/hflash/qnet_iwqos/prototol_virtual_matrix_data"
+    root_path = "/home/normaluser/hflash/qnet_iwqos/prototol_virtual_matrix_data_chain"
     data_path = os.path.join(root_path, para)
     if not os.path.exists(data_path):
         data_matrix = np.load(data_path)

@@ -48,6 +48,14 @@ def get_cfs_virtual_adjacency_matrix_of_chain(qubit_per_channel, cutoff, p_cons,
         print("Path not exists!")
 
 
+def get_data_by_path():
+    data_path = "/home/normaluser/hflash/qnet_iwqos/prototol_virtual_matrix_data/random_qswap_0.12_qubit_per_channel_hetero_random_p_swap0.95_p_cons0.05_cutoff_10.npy"
+    if os.path.exists(data_path):
+        data_matrix = np.load(data_path)
+        return data_matrix
+    else:
+        print("Path not exists!")
+
 # print(get_cfs_virtual_adjacency_matrix_of_grid(qubit_per_channel = 3, cutoff = 7, p_cons = 0.35,
 #                                               p_swap = 0.95,
 #                                               q_swap = 0.30,
@@ -56,3 +64,36 @@ def get_cfs_virtual_adjacency_matrix_of_chain(qubit_per_channel, cutoff, p_cons,
 #                                               p_swap = 0.50,
 #                                               q_swap = 0.30,
 #                                               swap_mode = "algebraic_connectivity"))
+
+def protocol_data_batch():
+    qubit_per_channels = [1, 3, 5]
+    cutoffs = [i for i in range(6, 11)]
+    p_cons_list = [i * 0.05 for i in range(0, 11)]
+    p_swap_list = [i * 0.05 for i in range(10, 20)]
+    q_swap_list = [i * 0.05 for i in range(6, 7)]
+    # N_samples = 1
+    # total_time = 1000
+    swap_modes = ["total_distance", "algebraic_connectivity"]
+    count = 0
+    correct_count = 0
+    for q_swap in q_swap_list:
+        for qubit_per_channel in qubit_per_channels:
+            for p_cons in p_cons_list:
+                for cutoff in cutoffs:
+                    for p_swap in p_swap_list:
+                        for swap_mode in swap_modes:
+                            para = f"{swap_mode}_qswap_{q_swap:.2f}_qubit_per_channel_{qubit_per_channel}_p_swap{p_swap:.2f}_p_cons{p_cons:.2f}_cutoff_{cutoff}.npy"
+                            matrix_path = os.path.join(
+                                "/home/normaluser/hflash/qnet_iwqos/srs_prototol_virtual_matrix_data_grid", para)
+                            if not os.path.exists(matrix_path):
+                                print(para)
+                                count += 1
+                                continue
+                            correct_count += 1
+                            print(np.load(matrix_path))
+    return correct_count, count
+
+
+
+if __name__ == "__main__":
+    print(protocol_data_batch())

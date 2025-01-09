@@ -220,14 +220,40 @@ def create_qubit_registers(A, r):
                     S[i][j]=0, if nodes i and j do not share a physical link.
                     S[i][j][m]=None, if qubit (i,j,m) is unused.'''
     n = len(A)
+    if type(r) is int:
+        S = np.zeros((n, n)).tolist()
+        for i in range(n):
+            for j in range(i + 1, n):
+                if A[i, j] == 1:
+                    S[i][j] = [None] * r
+                    S[j][i] = [None] * r
+    elif type(r) is list:
+        assert len(r) == n
+        S = np.zeros((n, n)).tolist()
+        for i in range(n):
+            for j in range(i + 1, n):
+                if A[i, j] == 1:
+                    assert r[i][j] == r[j][i]
+                    S[i][j] = [None] * r[i][j]
+                    S[j][i] = [None] * r[j][i]
+    elif r == 'hetero_random':
+        max_value = 5
+        random.seed(3)
+        S = np.zeros((n, n)).tolist()
+        random_list = [random.randint(0, max_value) for _ in range(n)]
+        physical_bandwidth = np.zeros((n, n)).tolist()
+        for i in range(n):
+            for j in range(i + 1, n):
+                if A[i, j] == 1:
+                    physical_bandwidth[i][j] = random_list[j]
+                    physical_bandwidth[j][i] = random_list[j]
+                    S[i][j] = [None] * random_list[j]
+                    S[j][i] = [None] * random_list[j]
+            random.shuffle(random_list)
 
-    S = np.zeros((n, n)).tolist()
-    for i in range(n):
-        for j in range(i + 1, n):
-            if A[i, j] == 1:
-                S[i][j] = [None] * r
-                S[j][i] = [None] * r
     return S
+
+
 
 
 def generate_all_links(S, p):

@@ -26,8 +26,11 @@ import numpy as np
 from matrix2matrix import map_nodes
 from circuit2graph import circuitPartition
 import heapq
-from quantumcircuit.remotedag import RemoteDag
-from srs_data import get_virtual_adjacency_matrix_of_3x3
+
+from src.protocol_data import get_cfs_virtual_adjacency_matrix_of_chain, get_cfs_virtual_adjacency_matrix_of_grid, get_data_by_path
+from src.quantumcircuit.remotedag import RemoteDag
+from src.srs_data import get_virtual_adjacency_matrix_of_3x3
+from src.avarage_physical_distance import physical_avg_dist_grid
 
 
 def circuit_partition_trial():
@@ -96,6 +99,27 @@ def trivial_allocate_subcircuit(subcircuits, subcircuit_communication, adjacency
     subcircuits_allocation = {}
     for index in range(subcircuits):
         subcircuits_allocation[index] = index
+    # subcircuits_allocation[0] = 2
+    # subcircuits_allocation[1] = 8
+    return subcircuits_allocation
+
+
+def random_allocate_subcircuit(subcircuits, subcircuit_communication, adjacency_matrix):
+    """
+    以随机 的方式得到子线路到量子网络拓扑结构的映射
+    具体为：
+    子线路1 → 量子计算机节点1
+    子线路2 → 量子计算机节点2
+    :param subcircuits: 子线路数目
+    :param subcircuit_communication: 子线路之间需要实现的通信
+    :param topology: 用邻接矩阵表示
+    :return:
+    """
+    subcircuits_allocation = {}
+    order = [i for i in range(9)]
+    random.shuffle(order)
+    for index in range(subcircuits):
+        subcircuits_allocation[index] = order[index]
     # subcircuits_allocation[0] = 2
     # subcircuits_allocation[1] = 8
     return subcircuits_allocation
@@ -793,6 +817,46 @@ def virtual_srs_info(srs_configurations, N_samples, total_time):
 def srs_config_squared_hard(qubit_per_channel, p_gen, p_swap, q_swap, p_cons, cutoff, randomseed):
     srs_configurations = {}
 
+    ## TOPOLOGY
+    # Use any function main.adjacency_*() to define a topology.
+    # Here we use a squared lattice (with hard boundary conditions)
+    # with 9 nodes as an example.
+    l = 3
+    n = int(l * l)
+    A = cd.adjacency_squared_hard(l)
+    topology = 'squared_hard'
+    srs_configurations['adj'] = A
+
+    ## HARDWARE
+    # p_gen = 1  # Probability of successful entanglement generation
+    # p_swap = 1  # Probability of successful swap
+    qbits_per_channel = qubit_per_channel  # Number of qubits per node per physical neighbor
+    srs_configurations['p_gen'] = p_gen
+    srs_configurations['p_swap'] = p_swap
+    srs_configurations['qubits'] = qbits_per_channel
+
+    ## SOFTWARE
+    # q_swap = 0.12  # Probability of performing swaps in the SRS protocol
+    max_links_swapped = 10  #  Maximum number of elementary links swapped
+    # p_cons = 0  # Probability of virtual neighbors consuming a link per time step
+    srs_configurations['q_swap'] = q_swap
+    srs_configurations['max_swap'] = max_links_swapped
+    srs_configurations['p_cons'] = p_cons
+
+    ## CUTOFF
+    # cutoff = 20
+    srs_configurations['cutoff'] = cutoff
+    if randomseed is not None:
+        srs_configurations['randomseed'] = randomseed
+    else:
+        srs_configurations['randomseed'] = random.seed()
+
+    return srs_configurations
+
+
+def srs_config_squared_hard_hetero(qubit_per_channel, p_gen, p_swap, q_swap, p_cons, cutoff, randomseed, max_qubit_per_channel):
+    srs_configurations = {}
+    # qubit_per_channels = []
     ## TOPOLOGY
     # Use any function main.adjacency_*() to define a topology.
     # Here we use a squared lattice (with hard boundary conditions)
@@ -1974,100 +2038,114 @@ def batch_srs_info():
     pass
 
 
-# def allocation_alg_trials_JV(qasm_path):
-#     # qasm_path = '/home/normaluser/fzchen/qnet_iwqos/qnet_iwqos/test_for_weight/qft_100.qasm'
-#     # circuit_execution(filepath, 2, q_swap, cutoff, 1, 1, 40, 'direct', 0.45, 'total_distance')
-#     # qasm_path = "/home/normaluser/fzchen/qnet_iwqos/qnet_iwqos/pra_benchmark/qaoa/qaoa_300.qasm"
-#     # qasm_path = "/home/normaluser/fzchen/qnet_iwqos/qnet_iwqos/pra_benchmark/small_scale/cm42a_207.qasm"
-#     # qasm_path = "/home/normaluser/fzchen/qnet_iwqos/qnet_iwqos/pra_benchmark/qft/qft_300.qasm"
-#     remote_operations, circuit_dagtable, gate_list, subcircuits_communication, qubit_loc_subcircuit_dic, subcircuit_qubit_partitions = circuitPartition(
-#         qasm_path, device_qubit_number=13, randomseed=0)
-#     # srs_configurations = srs_config_squared_hard(qubit_per_channel=1,  p_gen = 1, p_swap = 0.95, q_swap=0.12, p_cons = 0.95, cutoff=10, randomseed=random.seed())
-#     #
-#     srs_configurations = srs_config_squared_hard(qubit_per_channel=3, p_gen=1,
-#                                                  p_swap=0.95,
-#                                                  q_swap=0.12,
-#                                                  p_cons=0.05,
-#                                                  cutoff=10, randomseed=random.seed())
+def allocation_alg_trials_JV(qasm_path):
+    # qasm_path = '/home/normaluser/fzchen/qnet_iwqos/qnet_iwqos/test_for_weight/qft_100.qasm'
+    # circuit_execution(filepath, 2, q_swap, cutoff, 1, 1, 40, 'direct', 0.45, 'total_distance')
+    # qasm_path = "/home/normaluser/fzchen/qnet_iwqos/qnet_iwqos/pra_benchmark/qaoa/qaoa_300.qasm"
+    # qasm_path = "/home/normaluser/fzchen/qnet_iwqos/qnet_iwqos/pra_benchmark/small_scale/cm42a_207.qasm"
+    # qasm_path = "/home/normaluser/fzchen/qnet_iwqos/qnet_iwqos/pra_benchmark/qft/qft_300.qasm"
+    remote_operations, circuit_dagtable, gate_list, subcircuits_communication, qubit_loc_subcircuit_dic, subcircuit_qubit_partitions = circuitPartition(
+        qasm_path, device_qubit_number=13, randomseed=0)
+    # srs_configurations = srs_config_squared_hard(qubit_per_channel=1,  p_gen = 1, p_swap = 0.95, q_swap=0.12, p_cons = 0.95, cutoff=10, randomseed=random.seed())
+    #
+    srs_configurations = srs_config_squared_hard(qubit_per_channel=3, p_gen=1,
+                                                 p_swap=0.95,
+                                                 q_swap=0.12,
+                                                 p_cons=0.05,
+                                                 cutoff=10, randomseed=random.seed())
 
 #     # subcircuits_allocation = Hungarian_allocate_subcircuit(len(subcircuit_qubit_partitions),
 #     #     #                                                      subcircuits_communication,
 #     #     #                                                      get_virtual_adjacency_matrix_of_3x3(1))
 
-#     qubit_cnt = len(circuit_dagtable)
-#     remotedag = RemoteDag(qubit_cnt, remote_operations, gate_list, qubit_loc_subcircuit_dic)
-#     max_value = len(remote_operations) * physical_avg_dist_grid['3'] / (remotedag.depth * srs_configurations['qubits'])
-#     normalized_subcircuits_communication = normalize_subcircuit_communication(max_value, subcircuits_communication)
-#     subcircuits_allocation = Hungarian_allocate_subcircuit(len(subcircuit_qubit_partitions),
-#                                                            normalized_subcircuits_communication,
-#                                                            get_cfs_virtual_adjacency_matrix_of_grid(qubit_per_channel=3,
-#                                                                                                     cutoff=10,
-#                                                                                                     p_cons=0.25,
-#                                                                                                     p_swap=0.95,
-#                                                                                                     q_swap=0.30,
-#                                                                                                     swap_mode='algebraic_connectivity'))
-#     print(subcircuits_allocation)
-#     # for item in subcircuits_allocation:
-#     # subcircuits_allocation = trivial_allocate_subcircuit(len(subcircuit_qubit_partitions), normalized_subcircuits_communication, srs_configurations['adj'])
-#     ecost, time_step, execution_schedule, discard_entanglement_count = time_evolution_old_only_remote_time_greedy(
-#         srs_configurations,
-#         circuit_dagtable,
-#         gate_list,
-#         qubit_loc_subcircuit_dic,
-#         subcircuits_allocation,
-#         remote_operations,
-#         swap_mode='algebraic_connectivity')
-#     print(ecost, time_step, discard_entanglement_count)
+    qubit_cnt = len(circuit_dagtable)
+    remotedag = RemoteDag(qubit_cnt, remote_operations, gate_list, qubit_loc_subcircuit_dic)
+    # max_value = len(remote_operations) * physical_avg_dist_grid['3'] / (remotedag.depth * srs_configurations['qubits'])
+    # max_value = len(remote_operations) * physical_avg_dist_grid['3'] / (remotedag.depth)
+    # normalized_subcircuits_communication = normalize_subcircuit_communication(max_value, subcircuits_communication)
+    # subcircuits_allocation = Hungarian_allocate_subcircuit(len(subcircuit_qubit_partitions),
+    #                                                        normalized_subcircuits_communication,
+    #                                                        get_cfs_virtual_adjacency_matrix_of_grid(qubit_per_channel=3,
+    #                                                                                                 cutoff=10,
+    #                                                                                                 p_cons=0.25,
+    #                                                                                                 p_swap=0.95,
+    #                                                                                                 q_swap=0.30,
+    #                                                                                                 swap_mode='algebraic_connectivity'))
+    subcircuits_allocation = Hungarian_allocate_subcircuit(len(subcircuit_qubit_partitions),
+                                                           subcircuits_communication,
+                                                           get_data_by_path())
+
+    print(subcircuits_allocation)
+    # for item in subcircuits_allocation:
+    # subcircuits_allocation = trivial_allocate_subcircuit(len(subcircuit_qubit_partitions), normalized_subcircuits_communication, srs_configurations['adj'])
+    ecost, time_step, execution_schedule, discard_entanglement_count = time_evolution_old_only_remote_time_greedy(
+        srs_configurations,
+        circuit_dagtable,
+        gate_list,
+        qubit_loc_subcircuit_dic,
+        subcircuits_allocation,
+        remote_operations,
+        swap_mode='random')
+    print(ecost, time_step, discard_entanglement_count)
 
 
-# def allocation_alg_trials_trivial(qasm_path):
-#     # qasm_path = '/home/normaluser/fzchen/qnet_iwqos/qnet_iwqos/test_for_weight/qft_100.qasm'
-#     # circuit_execution(filepath, 2, q_swap, cutoff, 1, 1, 40, 'direct', 0.45, 'total_distance')
-#     # qasm_path = "/home/normaluser/fzchen/qnet_iwqos/qnet_iwqos/pra_benchmark/qaoa/qaoa_300.qasm"
-#     # qasm_path = "/home/normaluser/fzchen/qnet_iwqos/qnet_iwqos/pra_benchmark/small_scale/cm42a_207.qasm"
-#     # qasm_path = "/home/normaluser/fzchen/qnet_iwqos/qnet_iwqos/pra_benchmark/qft/qft_300.qasm"
-#     remote_operations, circuit_dagtable, gate_list, subcircuits_communication, qubit_loc_subcircuit_dic, subcircuit_qubit_partitions = circuitPartition(
-#         qasm_path, device_qubit_number=13, randomseed=0)
-#     # srs_configurations = srs_config_squared_hard(qubit_per_channel=1,  p_gen = 1, p_swap = 0.95, q_swap=0.12, p_cons = 0.95, cutoff=10, randomseed=random.seed())
-#     #
-#     srs_configurations = srs_config_squared_hard(qubit_per_channel=3, p_gen=1,
-#                                                  p_swap=0.95,
-#                                                  q_swap=0.12,
-#                                                  p_cons=0.05,
-#                                                  cutoff=10, randomseed=random.seed())
+def allocation_alg_trials_trivial(qasm_path):
+    # qasm_path = '/home/normaluser/fzchen/qnet_iwqos/qnet_iwqos/test_for_weight/qft_100.qasm'
+    # circuit_execution(filepath, 2, q_swap, cutoff, 1, 1, 40, 'direct', 0.45, 'total_distance')
+    # qasm_path = "/home/normaluser/fzchen/qnet_iwqos/qnet_iwqos/pra_benchmark/qaoa/qaoa_300.qasm"
+    # qasm_path = "/home/normaluser/fzchen/qnet_iwqos/qnet_iwqos/pra_benchmark/small_scale/cm42a_207.qasm"
+    # qasm_path = "/home/normaluser/fzchen/qnet_iwqos/qnet_iwqos/pra_benchmark/qft/qft_300.qasm"
+    remote_operations, circuit_dagtable, gate_list, subcircuits_communication, qubit_loc_subcircuit_dic, subcircuit_qubit_partitions = circuitPartition(
+        qasm_path, device_qubit_number=13, randomseed=0)
+    # srs_configurations = srs_config_squared_hard(qubit_per_channel=1,  p_gen = 1, p_swap = 0.95, q_swap=0.12, p_cons = 0.95, cutoff=10, randomseed=random.seed())
+    #
+    # srs_configurations = srs_config_squared_hard(qubit_per_channel='hetero_random', p_gen=1,
+    #                                              p_swap=0.95,
+    #                                              q_swap=0.12,
+    #                                              p_cons=0.05,
+    #                                              cutoff=10, randomseed=random.seed())
+    physical_bandwidth = [[0.0, 4, 0.0, 1, 0.0, 0.0, 0.0, 0.0, 0.0], [4, 0.0, 5, 0.0, 4, 0.0, 0.0, 0.0, 0.0],
+                          [0.0, 5, 0.0, 0.0, 0.0, 1, 0.0, 0.0, 0.0], [1, 0.0, 0.0, 0.0, 1, 0.0, 1, 0.0, 0.0],
+                          [0.0, 4, 0.0, 1, 0.0, 5, 0.0, 4, 0.0], [0.0, 0.0, 1, 0.0, 5, 0.0, 0.0, 0.0, 1],
+                          [0.0, 0.0, 0.0, 1, 0.0, 0.0, 0.0, 4, 0.0], [0.0, 0.0, 0.0, 0.0, 4, 0.0, 4, 0.0, 1],
+                          [0.0, 0.0, 0.0, 0.0, 0.0, 1, 0.0, 1, 0.0]]
+    srs_configurations = srs_config_squared_hard(qubit_per_channel=physical_bandwidth, p_gen=1,
+                                                 p_swap=0.95,
+                                                 q_swap=0.12,
+                                                 p_cons=0.05,
+                                                 cutoff=10, randomseed=random.seed())
+    # subcircuits_allocation = Hungarian_allocate_subcircuit(len(subcircuit_qubit_partitions),
+    #     #                                                      subcircuits_communication,
+    #     #                                                      get_virtual_adjacency_matrix_of_3x3(1))
 
-#     # subcircuits_allocation = Hungarian_allocate_subcircuit(len(subcircuit_qubit_partitions),
-#     #     #                                                      subcircuits_communication,
-#     #     #                                                      get_virtual_adjacency_matrix_of_3x3(1))
-
-#     qubit_cnt = len(circuit_dagtable)
-#     remotedag = RemoteDag(qubit_cnt, remote_operations, gate_list, qubit_loc_subcircuit_dic)
-#     # max_value = len(remote_operations) * physical_avg_dist_grid['3'] /(remotedag.depth * srs_configurations['qubits'])
-#     # normalized_subcircuits_communication = normalize_subcircuit_communication(max_value, subcircuits_communication)
-#     # subcircuits_allocation = Hungarian_allocate_subcircuit(len(subcircuit_qubit_partitions),
-#     #                                                      normalized_subcircuits_communication,
-#     #                                                      srs_configurations['adj'])
-#     # print(subcircuits_allocation)
-#     # for item in subcircuits_allocation:
-#     subcircuits_allocation = trivial_allocate_subcircuit(len(subcircuit_qubit_partitions), subcircuits_communication,
-#                                                          srs_configurations['adj'])
-#     print(subcircuits_allocation)
-#     ecost, time_step, execution_schedule, discard_entanglement_count = time_evolution_old_only_remote_time_greedy(
-#         srs_configurations,
-#         circuit_dagtable,
-#         gate_list,
-#         qubit_loc_subcircuit_dic,
-#         subcircuits_allocation,
-#         remote_operations,
-#         swap_mode='algebraic_connectivity')
-#     print(ecost, time_step, discard_entanglement_count)
+    qubit_cnt = len(circuit_dagtable)
+    remotedag = RemoteDag(qubit_cnt, remote_operations, gate_list, qubit_loc_subcircuit_dic)
+    # max_value = len(remote_operations) * physical_avg_dist_grid['3'] /(remotedag.depth * srs_configurations['qubits'])
+    # normalized_subcircuits_communication = normalize_subcircuit_communication(max_value, subcircuits_communication)
+    # subcircuits_allocation = Hungarian_allocate_subcircuit(len(subcircuit_qubit_partitions),
+    #                                                      normalized_subcircuits_communication,
+    #                                                      srs_configurations['adj'])
+    # print(subcircuits_allocation)
+    # for item in subcircuits_allocation:
+    subcircuits_allocation = trivial_allocate_subcircuit(len(subcircuit_qubit_partitions), subcircuits_communication,
+                                                         srs_configurations['adj'])
+    print(subcircuits_allocation)
+    ecost, time_step, execution_schedule, discard_entanglement_count = time_evolution_old_only_remote_time_greedy(
+        srs_configurations,
+        circuit_dagtable,
+        gate_list,
+        qubit_loc_subcircuit_dic,
+        subcircuits_allocation,
+        remote_operations,
+        swap_mode='random')
+    print(ecost, time_step, discard_entanglement_count)
 
 
 if __name__ == "__main__":
     # schedules = [0, 1]
     qasm_path = '/home/normaluser/fzchen/qnet_iwqos/qnet_iwqos/test_for_weight/qft_100.qasm'
-    # allocation_alg_trials_JV(qasm_path)
-    # allocation_alg_trials_trivial(qasm_path)
+    allocation_alg_trials_JV(qasm_path)
+    allocation_alg_trials_trivial(qasm_path)
     # small_device_qubit_number = 5
     # large_device_qubit_number = 40
     # N_samples = 10
