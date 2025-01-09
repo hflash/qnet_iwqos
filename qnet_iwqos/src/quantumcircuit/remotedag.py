@@ -8,6 +8,7 @@ class Gate:
         self.successors: list[Gate] = []
         self.successors_cnt = 0
         self.has_executed = False
+        self.layer = -1
 
     def get_successors_cnt(self):
         return self.successors_cnt
@@ -27,6 +28,7 @@ class RemoteDag:
 
             self.add_Gate(gate_id, qubit1_loc, qubit2_loc, qubit1, qubit2)
         self.calculate_cnt()
+        self.depth = self.get_depth()
 
     def add_Gate(self, id, q1_loc, q2_loc, q1, q2):
         tmp_Gate = Gate(id, q1_loc, q2_loc, q1, q2)
@@ -48,6 +50,8 @@ class RemoteDag:
         # 拓扑排序
         topo_order = []
         queue = deque(gate for gate in self.gate_list if in_degree[gate] == 0)
+        
+
         while queue:
             current = queue.popleft()
             topo_order.append(current)
@@ -65,6 +69,15 @@ class RemoteDag:
         for gate in self.gate_list:
             gate.successors_cnt = successor_count[gate]
 
+        for gate in topo_order:
+            left_layer = -1
+            right_layer = -1
+            if gate.q1_front != None:
+                left_layer = gate.q1_front.layer
+            if gate.q2_front != None:
+                right_layer = gate.q2_front.layer
+            gate.layer = max(left_layer, right_layer) + 1
+
     def get_front_layer(self):
         front_layer = []
         for gate in self.gate_list:
@@ -72,6 +85,13 @@ class RemoteDag:
                     gate.q2_front is None or gate.q2_front.has_executed) and not gate.has_executed:
                 front_layer.append(gate.id)
         return front_layer
+
+    def get_depth(self):
+        max_depth = -1
+        for gate in self.gate_list:
+            if gate.layer > max_depth:
+                max_depth = gate.layer
+        return max_depth
 
     def execute_gate(self, gateid: int):
         if gateid in self.gate_dict:
