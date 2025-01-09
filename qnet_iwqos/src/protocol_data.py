@@ -31,7 +31,7 @@ def get_cfs_virtual_adjacency_matrix_of_grid(qubit_per_channel, cutoff, p_cons,
         data_matrix = np.load(data_path)
         return data_matrix
     else:
-        print("Path not exists!")
+        print(f"{data_path}\nPath not exists!")
 
 def get_cfs_virtual_adjacency_matrix_of_chain(qubit_per_channel, cutoff, p_cons,
                                               p_swap,

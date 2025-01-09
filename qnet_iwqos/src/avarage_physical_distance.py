@@ -83,8 +83,9 @@ def average_distance(adj_matrix):
 
     return np.mean(finite_distances)
 
-# A = adjacency_squared_hard(3)
-# print(A)
-# print(floyd_warshall(A))
-# print(average_distance(A))
+if __name__ == '__main__':
+    A = adjacency_squared_hard(3)
+    print(A)
+    print(floyd_warshall(A))
+    print(average_distance(A))
 
