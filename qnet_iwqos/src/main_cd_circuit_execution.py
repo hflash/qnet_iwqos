@@ -1218,7 +1218,7 @@ def simulation_cd_for_virtual_neighbors(protocol, A, p_gen, q_swap, p_swap, p_co
         vdegrees = [[[None for _ in range(N_samples)] for _ in range(total_time)] for _ in range(n)]
         vneighs = [[[None for _ in range(N_samples)] for _ in range(total_time)] for _ in range(n)]
         vneighborhoods = [[[None for _ in range(N_samples)] for _ in range(total_time)] for _ in range(n)]
-
+        vneighborhoods_all_links = [[[None for _ in range(N_samples)] for _ in range(total_time)] for _ in range(n)]
         # ISSUE: If there is an error, may need to uncomment the four lines below
         # avg_vdegrees = [[0 for _ in range(total_time+1)] for _ in range(n)]
         # avg_vneighs = [[0 for _ in range(total_time+1)] for _ in range(n)]
@@ -1239,13 +1239,14 @@ def simulation_cd_for_virtual_neighbors(protocol, A, p_gen, q_swap, p_swap, p_co
                     vdegrees[node][t][sample] = vdeg
                     vneighs[node][t][sample] = vneigh
                     vneighborhoods[node][t][sample] = vneighborhood
+                    vneighborhoods_all_links[node][t][sample] = vneigh_links
         # avg_vdegrees = np.mean(vdegrees, axis=2)
         # avg_vneighs = np.mean(vneighs, axis=2)
         # std_vdegrees
         # = np.std(vdegrees, axis=2)
         # std_vneighs = np.std(vneighs, axis=2)
 
-        return vdegrees, vneighs, vneighborhoods, None
+        return vdegrees, vneighs, vneighborhoods, vneighborhoods_all_links
 
 
 def simulation_cd_for_virtual_neighbors_cfs(protocol, A, p_gen, q_swap, p_swap, p_cons, cutoff, M, qbits_per_channel,
@@ -1288,7 +1289,7 @@ def simulation_cd_for_virtual_neighbors_cfs(protocol, A, p_gen, q_swap, p_swap, 
         vdegrees = [[[None for _ in range(N_samples)] for _ in range(total_time)] for _ in range(n)]
         vneighs = [[[None for _ in range(N_samples)] for _ in range(total_time)] for _ in range(n)]
         vneighborhoods = [[[None for _ in range(N_samples)] for _ in range(total_time)] for _ in range(n)]
-
+        vneighborhoods_all_links = [[[None for _ in range(N_samples)] for _ in range(total_time)] for _ in range(n)]
         # ISSUE: If there is an error, may need to uncomment the four lines below
         # avg_vdegrees = [[0 for _ in range(total_time+1)] for _ in range(n)]
         # avg_vneighs = [[0 for _ in range(total_time+1)] for _ in range(n)]
@@ -1305,24 +1306,28 @@ def simulation_cd_for_virtual_neighbors_cfs(protocol, A, p_gen, q_swap, p_swap, 
                 else:
                     raise ValueError('Protocol not implemented')
                 for node in range(n):
-                    vdeg, vneigh, vneighborhood, vneigh_links = virtual_properties(S, node)
+                    # Todo:
+                    vneighborhood_count = [0] * n
+                    vdeg, vneigh, vneighborhood, vneigh_links = virtual_properties(S, node, vneighborhood_count)
                     vdegrees[node][t][sample] = vdeg
                     vneighs[node][t][sample] = vneigh
                     # print("simulation_cd_for_virtual_neighbors_cfs" + str(vneighborhood))
                     vneighborhoods[node][t][sample] = vneighborhood
+                    vneighborhoods_all_links[node][t][sample] = vneighborhood_count
+                    # vneighborhood_count[node][t][sample] = vneighborhood_count
         # avg_vdegrees = np.mean(vdegrees, axis=2)
         # avg_vneighs = np.mean(vneighs, axis=2)
         # std_vdegrees
         # = np.std(vdegrees, axis=2)
         # std_vneighs = np.std(vneighs, axis=2)
 
-        return vdegrees, vneighs, vneighborhoods, None
+        return vdegrees, vneighs, vneighborhoods, vneighborhoods_all_links
 
 
 # ---------------------------------------------------------------------------
 # ------------------------- PERFORMANCE METRICS -----------------------------
 # ---------------------------------------------------------------------------
-def virtual_properties(S, node):
+def virtual_properties(S, node, vneighborhood_count = None):
     n = len(S)
 
     vdeg = 0  # Virtual degree
@@ -1330,6 +1335,8 @@ def virtual_properties(S, node):
     vneighborhood = set()  # Virtual neighborhood
     vneigh_links = [[] for _ in range(n)]  # Element i contains the IDs of qubits
     # that share an entangled link with node i
+    # vneigh_all = [[] for _ in range(n)]
+    # vneighborhood_count = [0] * n
 
     for j in range(n):
         # If qubit address (node,j,-) exists:
@@ -1339,11 +1346,61 @@ def virtual_properties(S, node):
                 if not qubit is None:
                     vdeg += 1
                     vneigh_links[S[node][j][m][2][0]] += [(node, j, m)]
+# % S[i][j][m] contains the info about the qubit with address (i,j,m), which is the qubit held by node i in register (j,m), meaning that it was initially used to generate an elementary link with node j.
+#             % S[i][j][m][0]: age of the qubit (<cutoff+1).
+#             % S[i][j][m][1]: number of times its link was involved in swaps (<M).
+#             % S[i][j][m][2]: address of the qubit with which it is entangled.
+#             % address: [a, b ,c] a: location (node a), b: 与node b 相连, c: 第c个通信比特
+#             % S[i][j]=0.0, if nodes i and j do not share a physical link.
+#             % S[i][j][m]=None, if qubit (i,j,m) is unused.
+#                     assert vneigh_links[S[node][j][m][2][0]] == j
                     if not S[node][j][m][2][0] in vneighborhood:
                         vneighborhood.add(S[node][j][m][2][0])
                         vneigh += 1
+                    if vneighborhood_count:
+                        vneighborhood_count[S[node][j][m][2][0]] += 1
+                        # print(S[node][j][m][2][0])
+                        # print((node, j, m))
+                        # Todo:
     # print("virtual_properties: node" + str(node) + " " + str(vneighborhood))
+    # if vneighborhood_count:
     return vdeg, vneigh, list(vneighborhood), vneigh_links
+
+# backup
+# def virtual_properties(S, node):
+#     n = len(S)
+#
+#     vdeg = 0  # Virtual degree
+#     vneigh = 0  # Virtual neighborhood size
+#     vneighborhood = set()  # Virtual neighborhood
+#     vneigh_links = [[] for _ in range(n)]  # Element i contains the IDs of qubits
+#     # that share an entangled link with node i
+#     # vneigh_all = [[] for _ in range(n)]
+#
+#     for j in range(n):
+#         # If qubit address (node,j,-) exists:
+#         if not S[node][j] == 0:
+#             for m, qubit in enumerate(S[node][j]):
+#                 # If qubit is occupied:
+#                 if not qubit is None:
+#                     vdeg += 1
+#                     vneigh_links[S[node][j][m][2][0]] += [(node, j, m)]
+# # % S[i][j][m] contains the info about the qubit with address (i,j,m), which is the qubit held by node i in register (j,m), meaning that it was initially used to generate an elementary link with node j.
+# #             % S[i][j][m][0]: age of the qubit (<cutoff+1).
+# #             % S[i][j][m][1]: number of times its link was involved in swaps (<M).
+# #             % S[i][j][m][2]: address of the qubit with which it is entangled.
+# #             % address: [a, b ,c] a: location (node a), b: 与node b 相连, c: 第c个通信比特
+# #             % S[i][j]=0.0, if nodes i and j do not share a physical link.
+# #             % S[i][j][m]=None, if qubit (i,j,m) is unused.
+# #                     assert vneigh_links[S[node][j][m][2][0]] == j
+#                     if not S[node][j][m][2][0] in vneighborhood:
+#                         vneighborhood.add(S[node][j][m][2][0])
+#                         vneigh += 1
+#                         # print(S[node][j][m][2][0])
+#                         # print((node, j, m))
+#     # print("virtual_properties: node" + str(node) + " " + str(vneighborhood))
+#     return vdeg, vneigh, list(vneighborhood), vneigh_links
+
 
 
 def virtual_links_ij(S, node_i, node_j):
