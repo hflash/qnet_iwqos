@@ -48,8 +48,13 @@ def get_cfs_virtual_adjacency_matrix_of_chain(qubit_per_channel, cutoff, p_cons,
         print("Path not exists!")
 
 
-def get_data_by_path():
-    data_path = "/home/normaluser/hflash/qnet_iwqos/prototol_virtual_matrix_data/random_qswap_0.12_qubit_per_channel_hetero_random_p_swap0.95_p_cons0.05_cutoff_10.npy"
+def get_data_by_path(protocol):
+    # data_path = "/home/normaluser/hflash/qnet_iwqos/prototol_virtual_matrix_data/random_qswap_0.12_qubit_per_channel_hetero_random_p_swap0.95_p_cons0.05_cutoff_10.npy"
+    data_path = ''
+    if protocol == 'srs':
+        data_path = f'/home/normaluser/hflash/qnet_iwqos/test_data/{protocol}/all_links_random_qswap_0.12_qubit_per_channel_10_p_swap0.95_p_cons0.05_cutoff_10.npy'
+    else:
+        data_path = "/home/normaluser/hflash/qnet_iwqos/test_data/cfs/all_links_algebraic_connectivity_qswap_0.12_qubit_per_channel_10_p_swap0.95_p_cons0.05_cutoff_10.npy"
     if os.path.exists(data_path):
         data_matrix = np.load(data_path)
         return data_matrix
@@ -96,4 +101,5 @@ def protocol_data_batch():
 
 
 if __name__ == "__main__":
-    print(protocol_data_batch())
+    print(get_data_by_path('srs'))
+    print(get_data_by_path('cfs'))

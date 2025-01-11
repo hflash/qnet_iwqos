@@ -1235,11 +1235,20 @@ def simulation_cd_for_virtual_neighbors(protocol, A, p_gen, q_swap, p_swap, p_co
                 else:
                     raise ValueError('Protocol not implemented')
                 for node in range(n):
-                    vdeg, vneigh, vneighborhood, vneigh_links = virtual_properties(S, node)
+                    # Todo:
+                    vneighborhood_count = [0] * n
+                    vdeg, vneigh, vneighborhood, vneigh_links = virtual_properties(S, node, vneighborhood_count)
                     vdegrees[node][t][sample] = vdeg
                     vneighs[node][t][sample] = vneigh
+                    # print("simulation_cd_for_virtual_neighbors_cfs" + str(vneighborhood))
                     vneighborhoods[node][t][sample] = vneighborhood
-                    vneighborhoods_all_links[node][t][sample] = vneigh_links
+                    vneighborhoods_all_links[node][t][sample] = vneighborhood_count
+
+                    # vdeg, vneigh, vneighborhood, vneigh_links = virtual_properties(S, node)
+                    # vdegrees[node][t][sample] = vdeg
+                    # vneighs[node][t][sample] = vneigh
+                    # vneighborhoods[node][t][sample] = vneighborhood
+                    # vneighborhoods_all_links[node][t][sample] = vneigh_links
         # avg_vdegrees = np.mean(vdegrees, axis=2)
         # avg_vneighs = np.mean(vneighs, axis=2)
         # std_vdegrees
