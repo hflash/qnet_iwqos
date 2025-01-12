@@ -27,11 +27,11 @@ from matrix2matrix import map_nodes, map_nodes_greedy
 from circuit2graph import circuitPartition
 import heapq
 from matrix2matrix import compute_mapping_information
-from src.protocol_data import get_cfs_virtual_adjacency_matrix_of_chain, get_cfs_virtual_adjacency_matrix_of_grid, \
+from protocol_data import get_cfs_virtual_adjacency_matrix_of_chain, get_cfs_virtual_adjacency_matrix_of_grid, \
     get_data_by_path
-from src.quantumcircuit.remotedag import RemoteDag
-from src.srs_data import get_virtual_adjacency_matrix_of_3x3
-from src.avarage_physical_distance import physical_avg_dist_grid
+from quantumcircuit.remotedag import RemoteDag
+from srs_data import get_virtual_adjacency_matrix_of_3x3
+from avarage_physical_distance import physical_avg_dist_grid
 
 
 def circuit_partition_trial():
