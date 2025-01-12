@@ -22,12 +22,13 @@ import pandas as pd
 import distributed_operation_circuit as dioc
 from multiprocessing import Pool, pool, Lock
 from circuit2graph import circuitPartition
-from protocol_data import get_cfs_virtual_adjacency_matrix_of_chain, get_cfs_virtual_adjacency_matrix_of_grid
+from protocol_data import get_cfs_virtual_adjacency_matrix_of_chain, get_cfs_virtual_adjacency_matrix_of_grid, get_data_by_path
 from srs_data import get_virtual_adjacency_matrix_of_3x3
 import re
 import math
 from quantumcircuit.remotedag import RemoteDag
 from avarage_physical_distance import physical_avg_dist_grid
+from matrix2matrix import compute_mapping_information
 
 class Task:
     def __init__(self,circuit_path, name, paras:dict, save_path):
@@ -94,11 +95,11 @@ def circuit_execution(qasm_path, p_gen, p_swap, q_swap, p_cons, cutoff, swap_mod
     randomseed = np.random.seed()
 
     device_qubit_number = 0
-    qubit_number_pattern = re.compile('\S+?_(\d+)\.qasm')
+    qubit_number_pattern = re.compile('\S+?_n?(\d+)\.qasm')
     match_obj = re.match(qubit_number_pattern, qasm_path)
     if match_obj:
         qubit_number = int(match_obj.group(1))
-        device_qubit_number = math.ceil(qubit_number/8)
+        device_qubit_number = math.ceil(qubit_number/9)
     
 
     assert(device_qubit_number > 0)
@@ -107,16 +108,24 @@ def circuit_execution(qasm_path, p_gen, p_swap, q_swap, p_cons, cutoff, swap_mod
     remote_operations, circuit_dagtable, gate_list, subcircuits_communication, qubit_loc_subcircuit_dic, subcircuit_qubit_partitions = circuitPartition(
         qasm_path, device_qubit_number, randomseed)
     qubit_cnt = len(circuit_dagtable)
-    srs_configurations = dioc.srs_config_squared_hard(qubit_per_channel=channels, p_gen = p_gen, p_swap=p_swap,  q_swap=q_swap, p_cons = p_cons, cutoff=cutoff, randomseed=randomseed)
+    physical_bandwidth = [[0.0, 4, 0.0, 1, 0.0, 0.0, 0.0, 0.0, 0.0], [4, 0.0, 5, 0.0, 4, 0.0, 0.0, 0.0, 0.0],
+                          [0.0, 5, 0.0, 0.0, 0.0, 1, 0.0, 0.0, 0.0], [1, 0.0, 0.0, 0.0, 1, 0.0, 1, 0.0, 0.0],
+                          [0.0, 4, 0.0, 1, 0.0, 5, 0.0, 4, 0.0], [0.0, 0.0, 1, 0.0, 5, 0.0, 0.0, 0.0, 1],
+                          [0.0, 0.0, 0.0, 1, 0.0, 0.0, 0.0, 4, 0.0], [0.0, 0.0, 0.0, 0.0, 4, 0.0, 4, 0.0, 1],
+                          [0.0, 0.0, 0.0, 0.0, 0.0, 1, 0.0, 1, 0.0]]
+    srs_configurations = dioc.srs_config_squared_hard(qubit_per_channel=physical_bandwidth, p_gen = p_gen, p_swap=p_swap,  q_swap=q_swap, p_cons = p_cons, cutoff=cutoff, randomseed=randomseed)
     
     if allocation == 'trivial':
         subcircuits_allocation = dioc.trivial_allocate_subcircuit(len(subcircuit_qubit_partitions), subcircuits_communication, srs_configurations)
 
     elif allocation == 'random':
         subcircuits_allocation = dioc.random_allocate_subcircuit(len(subcircuit_qubit_partitions), subcircuits_communication, srs_configurations)
+    elif allocation == 'greedy':
+        subcircuits_allocation = dioc.greedy_allocate_subcircuit(len(subcircuit_qubit_partitions), subcircuits_communication, get_data_by_path('cfs'))
     else:
-        remotedag = RemoteDag(qubit_cnt, remote_operations, gate_list, qubit_loc_subcircuit_dic)
-        max_value = len(remote_operations) * physical_avg_dist_grid['3'] / (remotedag.depth * srs_configurations['qubits'])
+        #remotedag = RemoteDag(qubit_cnt, remote_operations, gate_list, qubit_loc_subcircuit_dic)
+        #max_value = len(remote_operations) * physical_avg_dist_grid['3'] / (remotedag.depth * srs_configurations['qubits'])
+        max_value = np.max(subcircuits_communication)
         normalized_subcircuits_communication = dioc.normalize_subcircuit_communication(max_value, subcircuits_communication)
         # subcircuits_allocation = dioc.Hungarian_allocate_subcircuit(len(subcircuit_qubit_partitions),
         #                                                     normalized_subcircuits_communication,
@@ -128,8 +137,13 @@ def circuit_execution(qasm_path, p_gen, p_swap, q_swap, p_cons, cutoff, swap_mod
         #                                                                                                 swap_mode=swap_mode))
         subcircuits_allocation = dioc.Hungarian_allocate_subcircuit(len(subcircuit_qubit_partitions),
                                                             normalized_subcircuits_communication,
-                                                            get_virtual_adjacency_matrix_of_3x3(channels))
+                                                            get_data_by_path('cfs'))
 
+    if allocation == 'hungarian':
+        info_data = compute_mapping_information(normalized_subcircuits_communication, get_data_by_path('cfs'), subcircuits_allocation)
+    else:
+        info_data = compute_mapping_information(subcircuits_communication, get_data_by_path('cfs'), subcircuits_allocation)
+    #print(info_data)
 
     timestart = time.time()
     if schedule == 'baseline':
@@ -147,7 +161,7 @@ def circuit_execution(qasm_path, p_gen, p_swap, q_swap, p_cons, cutoff, swap_mod
 
     #df.loc[circuitname] = np.mean(np.array(data),axis=0)
     print(qasm_path)
-    return [time_step, ecost, process_time, discard_entanglement_count]
+    return [time_step, ecost, process_time, discard_entanglement_count, info_data['cost']]
 
 
 if __name__ == "__main__":
@@ -162,8 +176,8 @@ if __name__ == "__main__":
         schedule = 0
     small_device_qubit_number = 5
     large_device_qubit_number = 40
-    qubit_per_channels = [1,3,5]
-    N_samples = 1
+    qubit_per_channels = ['hetero_random']
+    N_samples = 20
 
     # p_gen=1
     # p_swap=0.95
@@ -171,28 +185,32 @@ if __name__ == "__main__":
     # p_cons=0.0
     # cutoff=10
     test_para = 'allocation'
-    to_test = ['hungarian', 'trivial']
+    to_test = ['hungarian', 'trivial','greedy'] #'hungarian', 'trivial', 
+    #random_qswap_0.12_qubit_per_channel_hetero_random_p_swap0.95_p_cons0.05_cutoff_10
     paras = {
         'p_gen':1,
-        'p_swap':1,
+        'p_swap':0.95,
         'q_swap':0.12,
-        'p_cons':0.0,
+        'p_cons':0.05,
         'cutoff':10,
-        'swap_mode':'algebraic_connectivity', #algebraic_connectivity total_distance
-        'channels':1,
-        'allocation':'trivial',
+        'swap_mode':'algebraic_connectivity', #random algebraic_connectivity total_distance
+        'channels':'hetero_random',
+        'allocation':'greedy', #
         'schedule':'baseline', #global direct indirect
         'samples':N_samples
     }
 
     # filepath = '/home/normaluser/fzchen/qnet_iwqos/qnet_iwqos/test_for_weight/qft_100.qasm'
-    # circuit_execution(filepath, 0,q_swap,cutoff,1,1,40,'baseline', 0.05, 'algebraic_connectivity')
+    # circuit_execution(filepath, paras['p_gen'], paras['p_swap'], paras['q_swap'],
+    #                   paras['p_cons'], paras['cutoff'], paras['swap_mode'], paras['allocation'],
+    #                   paras['channels'], paras['schedule'], 5,40)
 
     for bandwidth in qubit_per_channels:
         paras['channels'] = bandwidth
         tasks_list = [[] for _ in range(len(to_test))]
 
-        path = '/home/normaluser/fzchen/qnet_iwqos/qnet_iwqos/test_for_weight'
+        #path = '/home/normaluser/fzchen/qnet_iwqos/qnet_iwqos/test_for_weight'
+        path = '/home/normaluser/fzchen/TQMR/haha/test/circuit_qasmbench_onlycx/large_h'
         tmp_data_dir = f'/home/normaluser/fzchen/qnet_iwqos/qnet_iwqos/tmp_data/'
         for root, dirs, files in os.walk(path):
             for file in files:
@@ -209,13 +227,14 @@ if __name__ == "__main__":
 
         
         for tasks in tasks_list:
-            df = pd.DataFrame(columns=['time cost', 'entanglement cost', 'processing time', 'discard entanglements'])
+            df = pd.DataFrame(columns=['time cost', 'entanglement cost', 'processing time', 'discard entanglements', 'cost'])
             for task in tasks:
                 df.loc[task.circuit_name] = np.mean(np.array(task.get_data()),axis=0)
             save_dir = f'test_data/{test_para}'
             os.makedirs(save_dir, exist_ok=True)
             log_name = "{}_{}_{}_{}_{}".format(tasks[0].swap_mode, tasks[0].allocation, tasks[0].schedule, tasks[0].channels, getattr(tasks[0], test_para))
-            with open(f'{save_dir}/{log_name}','w') as f:
-                for index, row in df.iterrows():
-                    f.write(f'{index}\n{row[0]}\t{row[1]}\t{row[2]}\t{row[3]}\n')
+            # with open(f'{save_dir}/{log_name}','w') as f:
+            #     for index, row in df.iterrows():
+            #         f.write(f'{index}\n{row[0]}\t{row[1]}\t{row[2]}\t{row[3]}\n')
+            df.to_csv(f'{save_dir}/{log_name}.csv', index=True)
 
