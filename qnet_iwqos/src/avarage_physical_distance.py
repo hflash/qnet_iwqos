@@ -83,9 +83,23 @@ def average_distance(adj_matrix):
 
     return np.mean(finite_distances)
 
+# A = adjacency_squared_hard(3)
+# print(A)
+# print(floyd_warshall(A))
+# print(average_distance(A))
 if __name__ == '__main__':
-    A = adjacency_squared_hard(3)
-    print(A)
-    print(floyd_warshall(A))
-    print(average_distance(A))
+    A = [[0.0, 4, 0.0, 1, 0.0, 0.0, 0.0, 0.0, 0.0], [4, 0.0, 5, 0.0, 4, 0.0, 0.0, 0.0, 0.0],
+         [0.0, 5, 0.0, 0.0, 0.0, 1, 0.0, 0.0, 0.0], [1, 0.0, 0.0, 0.0, 1, 0.0, 1, 0.0, 0.0],
+         [0.0, 4, 0.0, 1, 0.0, 5, 0.0, 4, 0.0], [0.0, 0.0, 1, 0.0, 5, 0.0, 0.0, 0.0, 1],
+         [0.0, 0.0, 0.0, 1, 0.0, 0.0, 0.0, 4, 0.0], [0.0, 0.0, 0.0, 0.0, 4, 0.0, 4, 0.0, 1],
+         [0.0, 0.0, 0.0, 0.0, 0.0, 1, 0.0, 1, 0.0]]
 
+    B = np.zeros((len(A), len(A)))
+    for i in range(len(A)):
+        for j in range(len(A)):
+            if A[i][j] != 0:
+                B[i][j] = 1
+            else:
+                B[i][j] = 0
+    print(floyd_warshall(B))
+    print(average_distance(B))

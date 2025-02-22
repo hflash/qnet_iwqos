@@ -1,0 +1,5 @@
+Sample: 9
+Time cost: 375
+Entanglement cost:372.0
+Processing time: 4.278650522232056
+Discard entanglements: 201

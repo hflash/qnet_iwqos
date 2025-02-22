@@ -238,7 +238,7 @@ def create_qubit_registers(A, r):
                     S[j][i] = [None] * r[j][i]
     elif r == 'hetero_random':
         max_value = 5
-        random.seed(3)
+        # random.seed(3)
         S = np.zeros((n, n)).tolist()
         random_list = [random.randint(0, max_value) for _ in range(n)]
         physical_bandwidth = np.zeros((n, n)).tolist()

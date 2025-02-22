@@ -95,8 +95,8 @@ def virtual_srs_info_vneighbors(srs_configurations, N_samples, total_time):
                                                                                   total_time,
                                                                                   srs_configurations['randomseed'],
                                                                                   progress_bar=None, return_data='all')
-
     return [vdegrees, vneighs, vneighborhoods]
+
 
 def virtual_cfs_info_vneighbors(srs_configurations, N_samples, total_time, swap_mode):
     protocol = 'cfs'
@@ -293,36 +293,52 @@ def data_process_virtual_topo_matrix(path):
 def batch_cfs_info_test():
     randomseed = np.random.seed()
     # randomseed = 1
-    qubit_per_channels = [2]
-    cutoffs = [10]
+    # qubit_per_channels = [1, 3, 5]
+    qubit_per_channels = [1]
+    cutoffs = [i for i in range(6, 10)]
     srs_info_list_avg = {}
     srs_info_list_vneighbor = {}
+    p_cons_list = [i * 0.05 for i in range(10)]
+    p_swap_list = [i * 0.05 for i in range(10, 19)]
+    q_swap_list = [i * 0.05 for i in range(6, 7)]
     N_samples = 1
-    total_time = 1000
+    total_time = 10000
     swap_modes = ["total_distance", "algebraic_connectivity"]
     # swap_modes = ["total_distance"]
     path_write_avg = '../exp_data_pra/srs_info/srs_avg_3x3.json'
     path_write_vneighbors = '../exp_data_pra/srs_info/srs_vneighbors3x3.json'
-    for i in range(6, 7):
+    for q_swap in q_swap_list:
         for qubit_per_channel in qubit_per_channels:
-            for cutoff in cutoffs:
-                for swap_mode in swap_modes:
-                # randomseed = 1
-                    srs_configurations = srs_config_squared_hard(q_swap=i * 0.02, qubit_per_channel=qubit_per_channel, p_gen = 1, p_swap = 1, p_cons = 0, cutoff=cutoff, randomseed=1)
-                    # qubit_per_channel, p_gen, p_swap, q_swap, p_cons, cutoff, randomseed
-                    para = "qswap_" + str(i) + "_cutoff_" + str(cutoff) + "_qubit_per_channel_" + str(qubit_per_channel) + "_swap_mode_" + swap_mode
-                    srs_info_list_avg[para] = virtual_cfs_info_avg(srs_configurations, N_samples, total_time, swap_mode)
-                    srs_info_list_vneighbor[para] = virtual_cfs_info_vneighbors(srs_configurations, N_samples, total_time, swap_mode)[2]
-                    A = np.zeros((9, 9))
-                    # vneighborhoods = [[[None for _ in range(N_samples)] for _ in range(total_time)] for _ in range(n)]
-                    for i, neighbor_list_all_node in enumerate(srs_info_list_vneighbor[para]):
-                        for sample in neighbor_list_all_node:
-                            for time in sample:
-                                for node in time:
-                                    if i == node:
-                                        continue
-                                    A[i][node] += 1
-                    print((A / (total_time * N_samples)).tolist())
+            for p_cons in p_cons_list:
+                for cutoff in cutoffs:
+                    for p_swap in p_swap_list:
+                        for swap_mode in swap_modes:
+                            # randomseed = 1
+                            srs_configurations = srs_config_squared_hard(q_swap=q_swap,
+                                                                         qubit_per_channel=qubit_per_channel, p_gen=1,
+                                                                         p_swap=p_swap, p_cons=p_cons, cutoff=cutoff,
+                                                                         randomseed=None)
+                            # qubit_per_channel, p_gen, p_swap, q_swap, p_cons, cutoff, randomseed
+                            para = f"{swap_mode}_qswap_{q_swap:.2f}_qubit_per_channel_{qubit_per_channel}_p_swap{p_swap:.2f}_p_cons{p_cons:.2f}_cutoff_{cutoff}.npy"
+
+                            srs_info_list_avg[para] = virtual_cfs_info_avg(srs_configurations, N_samples, total_time,
+                                                                           swap_mode)
+                            srs_info_list_vneighbor[para] = \
+                            virtual_cfs_info_vneighbors(srs_configurations, N_samples, total_time, swap_mode)[2]
+                            A = np.zeros((9, 9))
+                            # vneighborhoods = [[[None for _ in range(N_samples)] for _ in range(total_time)] for _ in range(n)]
+                            for i, neighbor_list_all_node in enumerate(srs_info_list_vneighbor[para]):
+                                for sample in neighbor_list_all_node:
+                                    for time in sample:
+                                        for node in time:
+                                            if i == node:
+                                                continue
+                                            A[i][node] += 1
+                            virtual_adjacency_matrix = A / (total_time * N_samples)
+                            # print((A / (total_time * N_samples)).tolist())
+                            matrix_path = os.path.join("/home/normaluser/hflash/qnet_iwqos/prototol_virtual_matrix_data", para)
+                            np.save(matrix_path, virtual_adjacency_matrix)
+                            # print(matrix_path)
                 # for item in srs_info_list_avg[para]:
                 #     print(item)
                 # for item in srs_info_list_vneighbor[para]:
@@ -346,7 +362,71 @@ def batch_cfs_info_test():
     #                 A[i][node] += 1
     # print((A / (total_time * N_samples)).tolist())
 
+# import numpy as np
+import os
+from concurrent.futures import ProcessPoolExecutor
+
+def process_params(q_swap, qubit_per_channel, p_cons, cutoff, p_swap, swap_mode, N_samples, total_time):
+    # Generate SRS configurations
+    srs_configurations = srs_config_squared_hard(q_swap=q_swap,
+                                                  qubit_per_channel=qubit_per_channel, p_gen=1,
+                                                  p_swap=p_swap, p_cons=p_cons, cutoff=cutoff,
+                                                  randomseed=None)
+
+    para = f"{swap_mode}_qswap_{q_swap:.2f}_qubit_per_channel_{qubit_per_channel}_p_swap{p_swap:.2f}_p_cons{p_cons:.2f}_cutoff_{cutoff}.npy"
+
+    srs_info_avg = virtual_cfs_info_avg(srs_configurations, N_samples, total_time, swap_mode)
+    srs_info_vneighbor = virtual_cfs_info_vneighbors(srs_configurations, N_samples, total_time, swap_mode)[2]
+
+    A = np.zeros((9, 9))
+
+    for i, neighbor_list_all_node in enumerate(srs_info_vneighbor):
+        for sample in neighbor_list_all_node:
+            for time in sample:
+                for node in time:
+                    if i == node:
+                        continue
+                    A[i][node] += 1
+
+    virtual_adjacency_matrix = A / (total_time * N_samples)
+
+    matrix_path = os.path.join("/home/normaluser/hflash/qnet_iwqos/prototol_virtual_matrix_data", para)
+    np.save(matrix_path, virtual_adjacency_matrix)
+    print(para)
+    return para  # Return the parameter string for tracking
+
+
+def parallel_sampling():
+    np.random.seed()
+    qubit_per_channels = [3]
+    cutoffs = [i for i in range(6, 11)]
+    p_cons_list = [i * 0.05 for i in range(4, 10)]
+    p_swap_list = [i * 0.05 for i in range(18, 20)]
+    q_swap_list = [i * 0.05 for i in range(6, 7)]
+    N_samples = 1
+    total_time = 10000
+    swap_modes = ["total_distance", "algebraic_connectivity"]
+
+    with ProcessPoolExecutor() as executor:
+        futures = []
+        for q_swap in q_swap_list:
+            for qubit_per_channel in qubit_per_channels:
+                for p_cons in p_cons_list:
+                    for cutoff in cutoffs:
+                        for p_swap in p_swap_list:
+                            for swap_mode in swap_modes:
+                                # Submit a new task
+                                futures.append(executor.submit(process_params, q_swap, qubit_per_channel,
+                                                               p_cons, cutoff, p_swap, swap_mode,
+                                                               N_samples, total_time))
+
+        # Optional: Handle results
+        for future in futures:
+            print("Processed:", future.result())
 
 if __name__ == '__main__':
-    batch_cfs_info_test()
+    parallel_sampling()
+
     # batch_srs_info()
+    # path = '../prototol_virtual_matrix_data/'
+
